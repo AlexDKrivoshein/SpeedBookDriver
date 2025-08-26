@@ -1,0 +1,14 @@
+{
+  "app.title": "SpeedBook",
+  "phone.get_started_with": "Get started with",
+  "phone.register": "Register",
+  "phone.mobile_number": "Mobile number",
+  "phone.search_country": "Search country or code",
+  "terms.title": "Terms and Conditions",
+  "privacy.title": "Privacy Policy",
+  "btn.book": "Book",
+  "from.select": "From where?",
+  "where.to.go": "Where to?",
+  "tracking.on": "Tracking On",
+  "tracking.off": "Tracking Off"
+}

@@ -1,0 +1,14 @@
+{
+  "app.title": "SpeedBook",
+  "phone.get_started_with": "Начните со",
+  "phone.register": "Зарегистрироваться",
+  "phone.mobile_number": "Номер телефона",
+  "phone.search_country": "Поиск страны или кода",
+  "terms.title": "Пользовательское соглашение",
+  "privacy.title": "Политика конфиденциальности",
+  "btn.book": "Заказать",
+  "from.select": "Откуда?",
+  "where.to.go": "Куда едем?",
+  "tracking.on": "Трекинг включён",
+  "tracking.off": "Трекинг выключен"
+}
