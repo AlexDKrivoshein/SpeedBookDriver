@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:ui';
 
 import 'features/home/brand.dart'; // kBrandYellow, kBrandYellowDark
 import 'sms_input_page.dart';      // подстрой путь, если файл лежит в другом месте
@@ -23,6 +24,7 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
   static const double _kFieldHeight = 56;
   static const double _kRadius = 16;
 
+
   final _phoneCtrl = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
@@ -33,11 +35,20 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
 
   Country _country =
   kCountries.firstWhere((c) => c.iso2 == 'KH', orElse: () => kCountries.first);
+  bool _carAnimStart = false;
 
   @override
   void dispose() {
     _phoneCtrl.dispose();
     super.dispose();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    Future.delayed(const Duration(milliseconds: 350), () {
+      if (mounted) setState(() => _carAnimStart = true);
+    });
   }
 
   Future<void> _pickCountry() async {
@@ -199,7 +210,7 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
                           fontWeight: FontWeight.w400, color: Colors.black87,
                         ),
                       ),
-                      Text('SpeedBook',
+                      Text('SpeedBook driver',
                         style: theme.textTheme.headlineSmall?.copyWith(
                           fontWeight: FontWeight.w700, color: Colors.black87,
                         ),
@@ -210,40 +221,69 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
                       // карточка-иллюстрация
                       Container(
                         decoration: BoxDecoration(
-                          //color: Colors.white,
+                          // color: Colors.white,
                           borderRadius: BorderRadius.circular(24),
-/*                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0x14000000),
-                              blurRadius: 12,
-                              offset: Offset(0, 6),
-                            )
-                          ],*/
+                          // boxShadow: [...], // опционально вернёшь, если нужен объём
                         ),
+                        clipBehavior: Clip.none,        // чтобы машинка могла выходить за пределы при анимациях
                         padding: const EdgeInsets.symmetric(vertical: 22),
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            Image.asset(
-                              _assetTemple,
-                              width: cardBase * 0.62,
-                              fit: BoxFit.contain,
-                              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-                            ),
-                            Positioned(
-                              left: 18,
-                              bottom: 10,
-                              child: Image.asset(
-                                _assetCar,
-                                width: 88,
-                                fit: BoxFit.contain,
-                                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-                              ),
-                            ),
-                          ],
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            final carWidth = constraints.maxWidth * 0.24; // ~как на скрине
+                            return Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                // храм
+                                Image.asset(
+                                  _assetTemple,
+                                  width: constraints.maxWidth * 0.62,
+                                  fit: BoxFit.contain,
+                                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                                ),
+                                // машинка выезжает слева с тенью формы
+                                Positioned(
+                                  left: 12,
+                                  bottom: 6,
+                                  child: LayoutBuilder(builder: (context, constraints) {
+                                    final carW = cardBase * 0.38;      // размер машины
+                                    final offscreen = -cardBase * 0.80; // насколько "за экраном" стартуем
+
+                                    return TweenAnimationBuilder<double>(
+                                      duration: const Duration(milliseconds: 1700), // 👈 медленнее
+                                      curve: Curves.easeOutCubic,                   // плавный разгон/торможение
+                                      tween: Tween(begin: 0, end: _carAnimStart ? 1 : 0),
+                                      builder: (_, t, child) {
+                                        final dx = lerpDouble(offscreen, 0, t)!;    // требует import 'dart:ui';
+                                        return Transform.translate(offset: Offset(dx, 0), child: child);
+                                      },
+                                      child: SizedBox(
+                                        width: carW,
+                                        child: Stack(
+                                          children: [
+                                            // тень
+                                            Transform.translate(
+                                              offset: const Offset(2, 6),
+                                              child: ImageFiltered(
+                                                imageFilter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
+                                                child: ColorFiltered(
+                                                  colorFilter: const ColorFilter.mode(Colors.black38, BlendMode.srcATop),
+                                                  child: Image.asset(_assetCar, width: carW, fit: BoxFit.contain),
+                                                ),
+                                              ),
+                                            ),
+                                            // машина
+                                            Image.asset(_assetCar, width: carW, fit: BoxFit.contain),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  }),
+                                ),
+                              ],
+                            );
+                          },
                         ),
                       ),
-
                       const SizedBox(height: 24),
 
                       // форма

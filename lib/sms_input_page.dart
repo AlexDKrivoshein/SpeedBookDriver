@@ -227,6 +227,7 @@ class _SmsInputPageState extends State<SmsInputPage>
           'locale': currentLocale,
           'app_version': info.version,
           'fcm_token': fcmToken,
+          'is_driver': true,
         }),
       )
           .timeout(const Duration(seconds: 10));
