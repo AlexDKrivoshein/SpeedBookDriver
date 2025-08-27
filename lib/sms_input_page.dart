@@ -34,7 +34,7 @@ class SmsInputPage extends StatefulWidget {
 class _SmsInputPageState extends State<SmsInputPage>
     with WidgetsBindingObserver {
   static const MethodChannel _configChannel =
-  MethodChannel('com.speedbook.taxi/config');
+  MethodChannel('com.speedbook.taxidriver/config');
 
   final _formKey = GlobalKey<FormState>();
   final TextEditingController smsController = TextEditingController();

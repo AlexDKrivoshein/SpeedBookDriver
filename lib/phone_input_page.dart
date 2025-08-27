@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:ui';
 
 import 'features/home/brand.dart'; // kBrandYellow, kBrandYellowDark
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'sms_input_page.dart';      // подстрой путь, если файл лежит в другом месте
 
 class PhoneInputPage extends StatefulWidget {
@@ -78,6 +79,13 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
     try {
       // опционально язык смс
       try { await FirebaseAuth.instance.setLanguageCode('en'); } catch (_) {}
+      try {
+        await FirebaseAuth.instance.setLanguageCode('en');
+        await FirebaseAuth.instance.setSettings(
+          appVerificationDisabledForTesting: false, // оставить false, если не используешь тестовые номера
+          forceRecaptchaFlow: kDebugMode,           // 👈 в debug включаем web reCAPTCHA вместо Play Integrity
+        );
+      } catch (_) {}
 
       await FirebaseAuth.instance.verifyPhoneNumber(
         phoneNumber: e164,
