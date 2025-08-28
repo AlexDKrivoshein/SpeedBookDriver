@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'api_service.dart';
+import 'brand.dart';
+import 'brand_header.dart';
 
 String t(BuildContext context, String key) =>
     ApiService.getTranslationForWidget(context, key);
@@ -41,9 +43,8 @@ class _VerificationPageState extends State<VerificationPage> {
     try {
       final XFile? shot = await _picker.pickImage(
         source: ImageSource.camera,
-        preferredCameraDevice: kind == 'selfie'
-            ? CameraDevice.front
-            : CameraDevice.rear,
+        preferredCameraDevice:
+        kind == 'selfie' ? CameraDevice.front : CameraDevice.rear,
         imageQuality: 90,
       );
       if (shot == null) return;
@@ -75,8 +76,7 @@ class _VerificationPageState extends State<VerificationPage> {
     });
 
     try {
-      String b64(File? f) =>
-          f == null ? '' : base64Encode(f.readAsBytesSync());
+      String b64(File? f) => f == null ? '' : base64Encode(f.readAsBytesSync());
 
       final payload = {
         'name': _nameCtrl.text.trim(),
@@ -106,126 +106,140 @@ class _VerificationPageState extends State<VerificationPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final theme = Brand.theme(Theme.of(context));
 
-    return Scaffold(
-      appBar: AppBar(title: Text(t(context, 'verification.title'))),
-      body: SafeArea(
-        child: Column(
-          children: [
-            if (_error != null)
-              MaterialBanner(
-                content: Text(_error!),
-                leading: const Icon(Icons.error_outline),
-                actions: [
-                  TextButton(
-                    onPressed: () => setState(() => _error = null),
-                    child: Text(t(context, 'common.hide')),
-                  ),
-                ],
-              ),
-            Expanded(
-              child: Stepper(
-                type: StepperType.vertical,
-                currentStep: _currentStep,
-                onStepCancel: _currentStep == 0
-                    ? null
-                    : () => setState(() => _currentStep -= 1),
-                onStepContinue: () {
-                  if (_currentStep == 0) {
-                    if (_formKey.currentState?.validate() != true) return;
-                  }
-                  if (_currentStep == 1 && _passportFile == null) return;
-                  if (_currentStep == 2 && _licenseFile == null) return;
+    return Theme(
+      data: theme,
+      child: Scaffold(
+        appBar: BrandHeader(
+//          title: t(context, 'verification.title'),
+          title: '',
+          logoAsset: 'assets/brand/speedbook.png',
+          showBack: true,
+        ),
+        body: SafeArea(
+          child: Column(
+            children: [
+              if (_error != null)
+                MaterialBanner(
+                  content: Text(_error!),
+                  leading: const Icon(Icons.error_outline),
+                  actions: [
+                    TextButton(
+                      onPressed: () => setState(() => _error = null),
+                      child: Text(t(context, 'common.hide')),
+                    ),
+                  ],
+                ),
+              Expanded(
+                child: Stepper(
+                  type: StepperType.vertical,
+                  currentStep: _currentStep,
+                  onStepCancel: _currentStep == 0
+                      ? null
+                      : () => setState(() => _currentStep -= 1),
+                  onStepContinue: () {
+                    if (_currentStep == 0) {
+                      if (_formKey.currentState?.validate() != true) return;
+                    }
+                    if (_currentStep == 1 && _passportFile == null) return;
+                    if (_currentStep == 2 && _licenseFile == null) return;
 
-                  if (_currentStep < 3) {
-                    setState(() => _currentStep += 1);
-                  }
-                },
-                controlsBuilder: (context, details) {
-                  final isLast = _currentStep == 3;
-                  return Row(
-                    children: [
-                      if (!isLast)
-                        FilledButton(
-                          onPressed: details.onStepContinue,
-                          child: Text(t(context, 'common.next')),
-                        ),
-                      if (_currentStep > 0) ...[
-                        const SizedBox(width: 8),
-                        TextButton(
-                          onPressed: details.onStepCancel,
-                          child: Text(t(context, 'common.back')),
-                        ),
+                    if (_currentStep < 3) {
+                      setState(() => _currentStep += 1);
+                    }
+                  },
+                  controlsBuilder: (context, details) {
+                    final isLast = _currentStep == 3;
+                    return Row(
+                      children: [
+                        if (!isLast)
+                          FilledButton(
+                            onPressed: details.onStepContinue,
+                            child: Text(t(context, 'common.next')),
+                          ),
+                        if (_currentStep > 0) ...[
+                          const SizedBox(width: 8),
+                          TextButton(
+                            onPressed: details.onStepCancel,
+                            child: Text(t(context, 'common.back')),
+                          ),
+                        ],
+                        if (isLast) ...[
+                          const Spacer(),
+                          FilledButton.icon(
+                            onPressed: _canSubmit ? _submit : null,
+                            icon: _submitting
+                                ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child:
+                              CircularProgressIndicator(strokeWidth: 2),
+                            )
+                                : const Icon(Icons.verified_user),
+                            label: Text(t(context, 'verification.submit')),
+                          ),
+                        ],
                       ],
-                      if (isLast) ...[
-                        FilledButton.icon(
-                          onPressed: _canSubmit ? _submit : null,
-                          icon: _submitting
-                              ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                              : const Icon(Icons.verified_user),
-                          label: Text(t(context, 'verification.submit')),
-                        ),
-                      ],
-                    ],
-                  );
-                },
-                steps: [
-                  Step(
-                    title: Text(t(context, 'verification.step.data.title')),
-                    isActive: _currentStep >= 0,
-                    state: _currentStep > 0
-                        ? StepState.complete
-                        : StepState.editing,
-                    content: _NameStep(formKey: _formKey, nameCtrl: _nameCtrl),
-                  ),
-                  Step(
-                    title: Text(t(context, 'verification.step.passport.title')),
-                    subtitle: Text(t(context, 'verification.doc.hint.valid')),
-                    isActive: _currentStep >= 1,
-                    state: _passportFile != null
-                        ? StepState.complete
-                        : StepState.indexed,
-                    content: _DocStep(
-                      file: _passportFile,
-                      hint: t(context, 'verification.step.passport.hint'),
-                      onTake: () => _pickImageFor('passport'),
+                    );
+                  },
+                  steps: [
+                    Step(
+                      title: Text(t(context, 'verification.step.data.title')),
+                      isActive: _currentStep >= 0,
+                      state: _currentStep > 0
+                          ? StepState.complete
+                          : StepState.editing,
+                      content:
+                      _NameStep(formKey: _formKey, nameCtrl: _nameCtrl),
                     ),
-                  ),
-                  Step(
-                    title: Text(t(context, 'verification.step.license.title')),
-                    subtitle: Text(t(context, 'verification.doc.hint.valid')),
-                    isActive: _currentStep >= 2,
-                    state: _licenseFile != null
-                        ? StepState.complete
-                        : StepState.indexed,
-                    content: _DocStep(
-                      file: _licenseFile,
-                      hint: t(context, 'verification.step.license.hint'),
-                      onTake: () => _pickImageFor('license'),
+                    Step(
+                      title:
+                      Text(t(context, 'verification.step.passport.title')),
+                      subtitle: Text(t(context, 'verification.doc.hint.valid')),
+                      isActive: _currentStep >= 1,
+                      state: _passportFile != null
+                          ? StepState.complete
+                          : StepState.indexed,
+                      content: _DocStep(
+                        file: _passportFile,
+                        hint: t(context, 'verification.step.passport.hint'),
+                        onTake: () => _pickImageFor('passport'),
+                      ),
                     ),
-                  ),
-                  Step(
-                    title: Text(t(context, 'verification.step.selfie.title')),
-                    subtitle: Text(t(context, 'verification.step.selfie.subtitle')),
-                    isActive: _currentStep >= 3,
-                    state: _selfieFile != null
-                        ? StepState.complete
-                        : StepState.indexed,
-                    content: _DocStep(
-                      file: _selfieFile,
-                      hint: t(context, 'verification.step.selfie.hint'),
-                      onTake: () => _pickImageFor('selfie'),
+                    Step(
+                      title:
+                      Text(t(context, 'verification.step.license.title')),
+                      subtitle: Text(t(context, 'verification.doc.hint.valid')),
+                      isActive: _currentStep >= 2,
+                      state: _licenseFile != null
+                          ? StepState.complete
+                          : StepState.indexed,
+                      content: _DocStep(
+                        file: _licenseFile,
+                        hint: t(context, 'verification.step.license.hint'),
+                        onTake: () => _pickImageFor('license'),
+                      ),
                     ),
-                  ),
-                ],
+                    Step(
+                      title: Text(t(context, 'verification.step.selfie.title')),
+                      subtitle:
+                      Text(t(context, 'verification.step.selfie.subtitle')),
+                      isActive: _currentStep >= 3,
+                      state: _selfieFile != null
+                          ? StepState.complete
+                          : StepState.indexed,
+                      content: _DocStep(
+                        file: _selfieFile,
+                        hint: t(context, 'verification.step.selfie.hint'),
+                        onTake: () => _pickImageFor('selfie'),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -335,14 +349,14 @@ class _RulesBox extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: theme.colorScheme.primary.withOpacity(0.06),
+        color: Brand.yellow.withOpacity(0.08),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: theme.colorScheme.primary.withOpacity(0.25)),
+        border: Border.all(color: Brand.yellowDark.withOpacity(0.35)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.info_outline, size: 18),
+          const Icon(Icons.info_outline, size: 18, color: Brand.textDark),
           const SizedBox(width: 8),
           Expanded(child: Text(text)),
         ],
