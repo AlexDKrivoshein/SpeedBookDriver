@@ -13,6 +13,7 @@ enum DriverVerificationStatus {
   needVerification,
   awaitingVerification,
   verified,
+  rejected,
 }
 
 DriverVerificationStatus _statusFromClass(String? driverClass) {
@@ -21,6 +22,8 @@ DriverVerificationStatus _statusFromClass(String? driverClass) {
       return DriverVerificationStatus.needVerification;
     case 'VERIFIED':
       return DriverVerificationStatus.verified;
+    case 'REJECTED':
+      return DriverVerificationStatus.rejected;
     default:
       return DriverVerificationStatus.awaitingVerification;
   }
@@ -261,21 +264,35 @@ class _HomePageState extends State<HomePage> {
                   children: [
                     Text(
                       t(context, 'home.verification.title'),
-                      style: theme.textTheme.titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w600),
+                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 8),
                     _VerificationBadge(status: status),
-                    if (status == DriverVerificationStatus.needVerification) ...[
+
+                    // Пояснение причины при отказе
+                    if (status == DriverVerificationStatus.rejected &&
+                        (_details?.rejectionReason?.isNotEmpty ?? false)) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        t(context, 'home.verification.rejected_reason'),
+                        style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _details!.rejectionReason!,
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                    ],
+
+                    if (status == DriverVerificationStatus.needVerification ||
+                        status == DriverVerificationStatus.rejected) ...[
                       const SizedBox(height: 12),
                       SizedBox(
                         width: double.infinity,
                         child: FilledButton.icon(
                           onPressed: () async {
                             final res = await Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => const VerificationPage(),
-                              ),
+                              MaterialPageRoute(builder: (_) => const VerificationPage()),
                             );
                             if (res == true && mounted) _load();
                           },
@@ -336,20 +353,27 @@ class _VerificationBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = switch (status) {
-      DriverVerificationStatus.needVerification =>
-          ApiService.getTranslationForWidget(context, 'home.verification.need'),
-      DriverVerificationStatus.awaitingVerification =>
-          ApiService.getTranslationForWidget(context, 'home.verification.pending'),
-      DriverVerificationStatus.verified =>
-          ApiService.getTranslationForWidget(context, 'home.verification.verified'),
-    };
+    final String label;
+    final Color color;
 
-    final color = switch (status) {
-      DriverVerificationStatus.needVerification => Colors.red,
-      DriverVerificationStatus.awaitingVerification => Colors.amber,
-      DriverVerificationStatus.verified => Colors.green,
-    };
+    switch (status) {
+      case DriverVerificationStatus.needVerification:
+        label = ApiService.getTranslationForWidget(context, 'home.verification.need');
+        color = Colors.red;
+        break;
+      case DriverVerificationStatus.awaitingVerification:
+        label = ApiService.getTranslationForWidget(context, 'home.verification.pending');
+        color = Colors.amber;
+        break;
+      case DriverVerificationStatus.verified:
+        label = ApiService.getTranslationForWidget(context, 'home.verification.verified');
+        color = Colors.green;
+        break;
+      case DriverVerificationStatus.rejected:
+        label = ApiService.getTranslationForWidget(context, 'home.verification.rejected');
+        color = Colors.red;
+        break;
+    }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -365,16 +389,14 @@ class _VerificationBadge extends StatelessWidget {
           const SizedBox(width: 6),
           Text(
             label,
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              color: color,
-            ),
+            style: TextStyle(fontWeight: FontWeight.w600, color: color),
           ),
         ],
       ),
     );
   }
 }
+
 
 class _AccountSquareCard extends StatelessWidget {
   final DriverAccount account;

@@ -482,12 +482,14 @@ class DriverDetails {
   final String driverClass;
   final String rating;
   final List<DriverAccount> accounts;
+  final String? rejectionReason;
 
   DriverDetails({
     required this.name,
     required this.driverClass,
     required this.rating,
     required this.accounts,
+    this.rejectionReason,
   });
 
   factory DriverDetails.fromJson(Map<String, dynamic> json) {
@@ -505,6 +507,7 @@ class DriverDetails {
       driverClass: root['class']?.toString() ?? '',
       rating: root['rating']?.toString() ?? '',
       accounts: accList.map((m) => DriverAccount.fromJson(m)).toList(),
+      rejectionReason: root['reason']?.toString(),
     );
   }
 }
