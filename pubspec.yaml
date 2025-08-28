@@ -74,6 +74,7 @@ dependencies:
   firebase_messaging: any
   permission_handler: any
 
+  image_picker: any
   # UI
   cupertino_icons: any
   easy_localization: any

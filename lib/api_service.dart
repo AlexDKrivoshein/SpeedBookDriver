@@ -45,7 +45,7 @@ class ApiService {
   }
 
   // ==== каналы/переводы/состояние ====
-  static const MethodChannel _channel = MethodChannel('com.speedbook.taxi/config');
+  static const MethodChannel _channel = MethodChannel('com.speedbook.taxidriver/config');
 
   static Map<String, String> _translations = {};        // сетевые переводы
   static Map<String, String> _translationsLocal = {};   // локальные из assets (prelogin)
@@ -60,12 +60,15 @@ class ApiService {
     final token  = prefs.getString('token');
     final secret = prefs.getString('secret');
 
-    //debugPrint('[ApiService] Ensure token');
+    debugPrint('[ApiService] Ensure token');
 
     final missing = token == null || token.isEmpty || secret == null || secret.isEmpty;
     if (missing) {
+      debugPrint('[ApiService] Token not found, validate: $validateOnline');
       // В «мягком» режиме(по умолчанию) не вызываем onAuthFailed, чтобы не зациклиться (например, при загрузке переводов)
+//      await FirebaseAuth.instance.signOut();
       if (validateOnline) {
+        debugPrint('[ApiService] Handle invalid token');
         await _handleInvalidToken('Missing token or secret');
       }
       throw AuthException('Missing token or secret');
@@ -77,14 +80,18 @@ class ApiService {
         await _handleInvalidToken('API URL not available');
       }
       final resp = await http.post(
-        Uri.parse('$apiUrl/mapi/auth/check_token'),
+        Uri.parse('$apiUrl/api/validate_token'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
       );
+
       if (resp.statusCode != 200) {
+        debugPrint('[ApiService] Token not valid!');
         await _handleInvalidToken('Token validation failed');
+      } else {
+        debugPrint('[ApiService] Token valid');
       }
     }
     return token!;
@@ -92,8 +99,8 @@ class ApiService {
 
   static Future<Map<String, dynamic>> checkTokenOnline({bool validateOnline = true}) async {
     // Локальная проверка
-    await _ensureValidToken(validateOnline: false);
-    //debugPrint('[ApiService] Check token');
+    debugPrint('[ApiService] Check token, validate: $validateOnline');
+    await _ensureValidToken(validateOnline: validateOnline);
 
     if (!validateOnline) return {};
 
@@ -435,4 +442,70 @@ class ApiService {
     await loadPreloginTranslations(lang: lang);
     await loadTranslations(lang: lang);
   }
+
+  static Future<DriverDetails> getDriverDetails() async {
+    debugPrint('[ApiService] Get driver details');
+    // сервер возвращает статус OK + JWT с полями name, class и массивом account(s)
+    final payload = await callAndDecode('get_driver_details', const {});
+    debugPrint('[ApiService] driver details paygload: $payload');
+    return DriverDetails.fromJson(payload);
+  }
 }
+
+class DriverAccount {
+  final String id;
+  final String name;
+  final String currency; // код валюты (например, "RUB", "USD")
+  final double balance;
+
+  DriverAccount({
+    required this.id,
+    required this.name,
+    required this.currency,
+    required this.balance,
+  });
+
+  factory DriverAccount.fromJson(Map<String, dynamic> json) {
+    return DriverAccount(
+      id: json['id']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      currency: json['currency']?.toString() ?? '',
+      balance: (json['balance'] is num)
+          ? (json['balance'] as num).toDouble()
+          : double.tryParse(json['balance']?.toString() ?? '0') ?? 0.0,
+    );
+  }
+}
+
+class DriverDetails {
+  final String name;
+  final String driverClass;
+  final String rating;
+  final List<DriverAccount> accounts;
+
+  DriverDetails({
+    required this.name,
+    required this.driverClass,
+    required this.rating,
+    required this.accounts,
+  });
+
+  factory DriverDetails.fromJson(Map<String, dynamic> json) {
+    // Иногда полезная нагрузка лежит сразу в корне, иногда в data
+    final root = (json['data'] is Map<String, dynamic>) ? json['data'] : json;
+
+    // Поддерживаем оба варианта: `account` и `accounts`
+    final dynamic accAny = root['account'] ?? root['accounts'];
+    final accList = (accAny is List)
+        ? accAny.whereType<Map<String, dynamic>>().toList()
+        : <Map<String, dynamic>>[];
+
+    return DriverDetails(
+      name: root['name']?.toString() ?? '',
+      driverClass: root['class']?.toString() ?? '',
+      rating: root['rating']?.toString() ?? '',
+      accounts: accList.map((m) => DriverAccount.fromJson(m)).toList(),
+    );
+  }
+}
+

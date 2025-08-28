@@ -68,6 +68,7 @@ class _RootState extends State<_Root> {
 
     FirebaseAuth.instance.authStateChanges().listen((user) async {
       _isLoggedIn = user != null;
+      debugPrint('[Main] is logged: $_isLoggedIn');
 
       if (_isLoggedIn) {
         try {

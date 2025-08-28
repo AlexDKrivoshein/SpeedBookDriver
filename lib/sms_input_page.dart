@@ -210,7 +210,7 @@ class _SmsInputPageState extends State<SmsInputPage>
           ? 'ios'
           : 'unknown';
 
-      final urlStr = '${_apiUrl!}/api/auth_firebase';
+      final urlStr = '${_apiUrl!}/api/auth_driver';
       final response = await http
           .post(
         Uri.parse(urlStr),
@@ -242,7 +242,7 @@ class _SmsInputPageState extends State<SmsInputPage>
               final prefs = await SharedPreferences.getInstance();
               await prefs.setString('secret', secret);
               await prefs.setString('token', token);
-              await ApiService.loadTranslations();
+//              await ApiService.loadTranslations();
             }
             if (!mounted) return;
             final messenger = ScaffoldMessenger.of(context);

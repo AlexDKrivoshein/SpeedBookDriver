@@ -78,7 +78,7 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
     setState(() => _submitting = true);
     try {
       // опционально язык смс
-      try { await FirebaseAuth.instance.setLanguageCode('en'); } catch (_) {}
+      //try { await FirebaseAuth.instance.setLanguageCode('en'); } catch (_) {}
       try {
         await FirebaseAuth.instance.setLanguageCode('en');
         await FirebaseAuth.instance.setSettings(
