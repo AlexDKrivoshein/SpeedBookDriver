@@ -7,6 +7,9 @@ import 'package:image_picker/image_picker.dart';
 
 import 'api_service.dart';
 
+String t(BuildContext context, String key) =>
+    ApiService.getTranslationForWidget(context, key);
+
 class VerificationPage extends StatefulWidget {
   const VerificationPage({super.key});
 
@@ -38,7 +41,9 @@ class _VerificationPageState extends State<VerificationPage> {
     try {
       final XFile? shot = await _picker.pickImage(
         source: ImageSource.camera,
-        preferredCameraDevice: CameraDevice.front, // для селфи норм
+        preferredCameraDevice: kind == 'selfie'
+            ? CameraDevice.front
+            : CameraDevice.rear,
         imageQuality: 90,
       );
       if (shot == null) return;
@@ -50,15 +55,8 @@ class _VerificationPageState extends State<VerificationPage> {
         if (kind == 'selfie') _selfieFile = file;
       });
     } catch (e) {
-      setState(() => _error = 'Не удалось сделать снимок: $e');
+      setState(() => _error = '${t(context, "verification.error.capture")}: $e');
     }
-  }
-
-  String? _validateName(String? v) {
-    final s = (v ?? '').trim();
-    if (s.isEmpty) return 'Введите имя и фамилию как в документе';
-    if (s.length < 3) return 'Слишком короткое имя';
-    return null;
   }
 
   bool get _canSubmit =>
@@ -87,20 +85,18 @@ class _VerificationPageState extends State<VerificationPage> {
           'driver_license': b64(_licenseFile),
           'selfie_with_passport': b64(_selfieFile),
         },
-        // Можно добавить mime/type при необходимости
       };
 
-      // Если сервер ждёт JWT-вызов:
       await ApiService.callAndDecode('submit_verification', payload)
           .timeout(const Duration(seconds: 25));
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Документы отправлены на проверку')),
+        SnackBar(content: Text(t(context, 'verification.snackbar.sent'))),
       );
-      Navigator.of(context).pop(true); // вернёмся на Home с флагом успеха
+      Navigator.of(context).pop(true);
     } on TimeoutException {
-      setState(() => _error = 'Время ожидания истекло. Повторите позже.');
+      setState(() => _error = t(context, 'verification.error.timeout'));
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
@@ -108,13 +104,12 @@ class _VerificationPageState extends State<VerificationPage> {
     }
   }
 
-  // ---- UI ----
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Верификация')),
+      appBar: AppBar(title: Text(t(context, 'verification.title'))),
       body: SafeArea(
         child: Column(
           children: [
@@ -125,7 +120,7 @@ class _VerificationPageState extends State<VerificationPage> {
                 actions: [
                   TextButton(
                     onPressed: () => setState(() => _error = null),
-                    child: const Text('Скрыть'),
+                    child: Text(t(context, 'common.hide')),
                   ),
                 ],
               ),
@@ -154,13 +149,13 @@ class _VerificationPageState extends State<VerificationPage> {
                       if (!isLast)
                         FilledButton(
                           onPressed: details.onStepContinue,
-                          child: const Text('Далее'),
+                          child: Text(t(context, 'common.next')),
                         ),
                       if (_currentStep > 0) ...[
                         const SizedBox(width: 8),
                         TextButton(
                           onPressed: details.onStepCancel,
-                          child: const Text('Назад'),
+                          child: Text(t(context, 'common.back')),
                         ),
                       ],
                       if (isLast) ...[
@@ -173,7 +168,7 @@ class _VerificationPageState extends State<VerificationPage> {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                               : const Icon(Icons.verified_user),
-                          label: const Text('Отправить на проверку'),
+                          label: Text(t(context, 'verification.submit')),
                         ),
                       ],
                     ],
@@ -181,7 +176,7 @@ class _VerificationPageState extends State<VerificationPage> {
                 },
                 steps: [
                   Step(
-                    title: const Text('Данные'),
+                    title: Text(t(context, 'verification.step.data.title')),
                     isActive: _currentStep >= 0,
                     state: _currentStep > 0
                         ? StepState.complete
@@ -189,44 +184,41 @@ class _VerificationPageState extends State<VerificationPage> {
                     content: _NameStep(formKey: _formKey, nameCtrl: _nameCtrl),
                   ),
                   Step(
-                    title: const Text('Фото паспорта'),
-                    subtitle: const Text('Документ должен быть настоящим и не просроченным'),
+                    title: Text(t(context, 'verification.step.passport.title')),
+                    subtitle: Text(t(context, 'verification.doc.hint.valid')),
                     isActive: _currentStep >= 1,
                     state: _passportFile != null
                         ? StepState.complete
                         : StepState.indexed,
                     content: _DocStep(
                       file: _passportFile,
-                      hint:
-                      'Сделайте фото разворота с фото и данными. Документ должен быть действительным.',
+                      hint: t(context, 'verification.step.passport.hint'),
                       onTake: () => _pickImageFor('passport'),
                     ),
                   ),
                   Step(
-                    title: const Text('Фото водительских прав'),
-                    subtitle: const Text('Документ должен быть настоящим и не просроченным'),
+                    title: Text(t(context, 'verification.step.license.title')),
+                    subtitle: Text(t(context, 'verification.doc.hint.valid')),
                     isActive: _currentStep >= 2,
                     state: _licenseFile != null
                         ? StepState.complete
                         : StepState.indexed,
                     content: _DocStep(
                       file: _licenseFile,
-                      hint:
-                      'Сделайте фото лицевой стороны прав с ФИО и сроком действия.',
+                      hint: t(context, 'verification.step.license.hint'),
                       onTake: () => _pickImageFor('license'),
                     ),
                   ),
                   Step(
-                    title: const Text('Селфи с паспортом'),
-                    subtitle: const Text('Лицо открыто, без головных уборов; паспорт читаем'),
+                    title: Text(t(context, 'verification.step.selfie.title')),
+                    subtitle: Text(t(context, 'verification.step.selfie.subtitle')),
                     isActive: _currentStep >= 3,
                     state: _selfieFile != null
                         ? StepState.complete
                         : StepState.indexed,
                     content: _DocStep(
                       file: _selfieFile,
-                      hint:
-                      'Держите паспорт открытым рядом с лицом. Лицо полностью открыто (без очков и головных уборов), паспорт читаем.',
+                      hint: t(context, 'verification.step.selfie.hint'),
                       onTake: () => _pickImageFor('selfie'),
                     ),
                   ),
@@ -245,6 +237,9 @@ class _NameStep extends StatelessWidget {
   final TextEditingController nameCtrl;
   const _NameStep({required this.formKey, required this.nameCtrl});
 
+  String t(BuildContext context, String key) =>
+      ApiService.getTranslationForWidget(context, key);
+
   @override
   Widget build(BuildContext context) {
     return Form(
@@ -252,15 +247,15 @@ class _NameStep extends StatelessWidget {
       child: TextFormField(
         controller: nameCtrl,
         textInputAction: TextInputAction.next,
-        decoration: const InputDecoration(
-          labelText: 'Имя и фамилия',
-          hintText: 'Как в документе',
-          prefixIcon: Icon(Icons.person),
+        decoration: InputDecoration(
+          labelText: t(context, 'verification.name.label'),
+          hintText: t(context, 'verification.name.hint'),
+          prefixIcon: const Icon(Icons.person),
         ),
         validator: (v) {
           final s = (v ?? '').trim();
-          if (s.isEmpty) return 'Введите имя и фамилию как в документе';
-          if (s.length < 3) return 'Слишком короткое имя';
+          if (s.isEmpty) return t(context, 'verification.name.error.empty');
+          if (s.length < 3) return t(context, 'verification.name.error.short');
           return null;
         },
       ),
@@ -277,6 +272,9 @@ class _DocStep extends StatelessWidget {
     required this.hint,
     required this.onTake,
   });
+
+  String t(BuildContext context, String key) =>
+      ApiService.getTranslationForWidget(context, key);
 
   @override
   Widget build(BuildContext context) {
@@ -298,7 +296,7 @@ class _DocStep extends StatelessWidget {
             child: file == null
                 ? Center(
               child: Text(
-                'Фото не добавлено',
+                t(context, 'verification.photo.empty'),
                 style: theme.textTheme.bodySmall,
               ),
             )
@@ -311,14 +309,14 @@ class _DocStep extends StatelessWidget {
             FilledButton.icon(
               onPressed: onTake,
               icon: const Icon(Icons.photo_camera),
-              label: const Text('Сделать фото'),
+              label: Text(t(context, 'verification.photo.take')),
             ),
             const SizedBox(width: 8),
             if (file != null)
               OutlinedButton.icon(
                 onPressed: onTake,
                 icon: const Icon(Icons.restart_alt),
-                label: const Text('Переснять'),
+                label: Text(t(context, 'verification.photo.retake')),
               ),
           ],
         ),
