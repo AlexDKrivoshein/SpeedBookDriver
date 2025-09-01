@@ -1,11 +1,15 @@
+// lib/phone_input_page.dart
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'dart:ui';
-
-import 'features/home/brand.dart'; // kBrandYellow, kBrandYellowDark
 import 'package:flutter/foundation.dart' show kDebugMode;
-import 'sms_input_page.dart';      // подстрой путь, если файл лежит в другом месте
+import 'package:provider/provider.dart';
+
+import 'brand.dart';
+import 'sms_input_page.dart';
+import 'translations.dart'; // t(context, key)
 
 class PhoneInputPage extends StatefulWidget {
   const PhoneInputPage({super.key});
@@ -24,7 +28,6 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
 
   static const double _kFieldHeight = 56;
   static const double _kRadius = 16;
-
 
   final _phoneCtrl = TextEditingController();
   final _formKey = GlobalKey<FormState>();
@@ -68,8 +71,9 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
 
     final digits = _phoneCtrl.text.replaceAll(RegExp(r'\D'), '');
     if (digits.isEmpty) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter phone number')),
+        SnackBar(content: Text(t(context, 'phone.enter_number'))),
       );
       return;
     }
@@ -77,14 +81,15 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
 
     setState(() => _submitting = true);
     try {
-      // опционально язык смс
-      //try { await FirebaseAuth.instance.setLanguageCode('en'); } catch (_) {}
+      // язык SMS: берём из Translations.lang
+      final lang = context.read<Translations>().lang;
       try {
-        await FirebaseAuth.instance.setLanguageCode('en');
-        await FirebaseAuth.instance.setSettings(
-          appVerificationDisabledForTesting: false, // оставить false, если не используешь тестовые номера
-          forceRecaptchaFlow: kDebugMode,           // 👈 в debug включаем web reCAPTCHA вместо Play Integrity
-        );
+        await FirebaseAuth.instance.setLanguageCode(lang);
+        // Если нужно — включить/выключить специальные режимы:
+        // await FirebaseAuth.instance.setSettings(
+        //   appVerificationDisabledForTesting: false,
+        //   forceRecaptchaFlow: kDebugMode,
+        // );
       } catch (_) {}
 
       await FirebaseAuth.instance.verifyPhoneNumber(
@@ -95,13 +100,14 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
           // Android может автоподтвердить — попробуем залогиниться
           try { await FirebaseAuth.instance.signInWithCredential(credential); } catch (_) {}
           if (!mounted) return;
-          // TODO: навигация на главный экран, если автологин удался
+          // Можно сразу навигировать на главный, если автологин удался
+          // Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false);
         },
         verificationFailed: (FirebaseAuthException e) {
           if (!mounted) return;
           setState(() => _submitting = false);
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Verification failed: ${e.message ?? e.code}')),
+            SnackBar(content: Text('${t(context, "phone.verification_failed")}: ${e.message ?? e.code}')),
           );
         },
         codeSent: (String verificationId, int? resendToken) {
@@ -130,7 +136,7 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
       if (!mounted) return;
       setState(() => _submitting = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to start verification: $e')),
+        SnackBar(content: Text('${t(context, "phone.failed_start")}: $e')),
       );
     }
   }
@@ -161,7 +167,7 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
             top: 0, left: 0, right: 0,
             child: Container(
               height: 64,
-              color: kBrandYellow,
+              color: Brand.yellow,
               alignment: Alignment.center,
               child: Padding(
                 padding: const EdgeInsets.only(top: 4),
@@ -204,7 +210,7 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
                     24,
                     24 + 64,
                     24,
-                    (keyboard ? 16 : bottomPanelHeight + 16) + insets.bottom,  // <-- ключ
+                    (keyboard ? 16 : bottomPanelHeight + 16) + insets.bottom,
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.center,
@@ -213,12 +219,14 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
                       _AppIcon(logoAsset: _assetSbLogo, cardAsset: _assetIconBg),
 
                       const SizedBox(height: 12),
-                      Text('Get started with',
+                      Text(
+                        t(context, 'phone.title_top'), // "Get started with"
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w400, color: Colors.black87,
                         ),
                       ),
-                      Text('SpeedBook driver',
+                      Text(
+                        t(context, 'phone.title_app'), // "SpeedBook driver"
                         style: theme.textTheme.headlineSmall?.copyWith(
                           fontWeight: FontWeight.w700, color: Colors.black87,
                         ),
@@ -229,15 +237,12 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
                       // карточка-иллюстрация
                       Container(
                         decoration: BoxDecoration(
-                          // color: Colors.white,
                           borderRadius: BorderRadius.circular(24),
-                          // boxShadow: [...], // опционально вернёшь, если нужен объём
                         ),
-                        clipBehavior: Clip.none,        // чтобы машинка могла выходить за пределы при анимациях
+                        clipBehavior: Clip.none,
                         padding: const EdgeInsets.symmetric(vertical: 22),
                         child: LayoutBuilder(
                           builder: (context, constraints) {
-                            final carWidth = constraints.maxWidth * 0.24; // ~как на скрине
                             return Stack(
                               alignment: Alignment.center,
                               children: [
@@ -248,20 +253,20 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
                                   fit: BoxFit.contain,
                                   errorBuilder: (_, __, ___) => const SizedBox.shrink(),
                                 ),
-                                // машинка выезжает слева с тенью формы
+                                // машинка выезжает слева
                                 Positioned(
                                   left: 12,
                                   bottom: 6,
                                   child: LayoutBuilder(builder: (context, constraints) {
-                                    final carW = cardBase * 0.38;      // размер машины
-                                    final offscreen = -cardBase * 0.80; // насколько "за экраном" стартуем
+                                    final carW = cardBase * 0.38;
+                                    final offscreen = -cardBase * 0.80;
 
                                     return TweenAnimationBuilder<double>(
-                                      duration: const Duration(milliseconds: 1700), // 👈 медленнее
-                                      curve: Curves.easeOutCubic,                   // плавный разгон/торможение
+                                      duration: const Duration(milliseconds: 1700),
+                                      curve: Curves.easeOutCubic,
                                       tween: Tween(begin: 0, end: _carAnimStart ? 1 : 0),
-                                      builder: (_, t, child) {
-                                        final dx = lerpDouble(offscreen, 0, t)!;    // требует import 'dart:ui';
+                                      builder: (_, tVal, child) {
+                                        final dx = lerpDouble(offscreen, 0, tVal)!;
                                         return Transform.translate(offset: Offset(dx, 0), child: child);
                                       },
                                       child: SizedBox(
@@ -346,7 +351,7 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
                                   width: 22, height: 22,
                                   child: CircularProgressIndicator(strokeWidth: 2),
                                 )
-                                    : const Text('Register'),
+                                    : Text(t(context, 'phone.register')), // "Register"
                               ),
                             ),
                           ],
@@ -366,8 +371,8 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
               top: false,
               child: AnimatedOpacity(
                 duration: const Duration(milliseconds: 200),
-                opacity: keyboard ? 0.0 : 1.0,                // <-- плавно скрываем
-                child: IgnorePointer(                         // <-- на всякий случай отключаем клики
+                opacity: keyboard ? 0.0 : 1.0,
+                child: IgnorePointer(
                   ignoring: keyboard,
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(24, 12, 24, 12),
@@ -375,7 +380,7 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          'By logging in or registering you agree to our Terms of Service and Privacy Policy',
+                          t(context, 'phone.terms.caption'),
                           textAlign: TextAlign.center,
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.black54),
                         ),
@@ -384,8 +389,14 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
                           alignment: WrapAlignment.center,
                           spacing: 16,
                           children: [
-                            _Link(text: 'Terms and Conditions', onTap: () => _openUrl('https://example.com/terms')),
-                            _Link(text: 'Privacy Policy', onTap: () => _openUrl('https://example.com/privacy')),
+                            _Link(
+                              text: t(context, 'phone.terms.link'),
+                              onTap: () => _openUrl('https://example.com/terms'),
+                            ),
+                            _Link(
+                              text: t(context, 'phone.privacy.link'),
+                              onTap: () => _openUrl('https://example.com/privacy'),
+                            ),
                           ],
                         ),
                       ],
@@ -434,13 +445,11 @@ class _AppIcon extends StatelessWidget {
   }
 }
 
-// генерирует флаг по ISO, если вдруг в Country.flag пусто
 String flagFromIso(String iso2) {
   final cc = iso2.toUpperCase();
   return String.fromCharCodes(cc.codeUnits.map((c) => 0x1F1E6 + (c - 65)));
 }
 
-// пилюля с флагом
 class _FlagPill extends StatelessWidget {
   const _FlagPill({required this.country, required this.onTap, required this.height, required this.radius});
   final Country country; final VoidCallback onTap; final double height; final double radius;
@@ -461,10 +470,8 @@ class _FlagPill extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 14),
           constraints: const BoxConstraints(minWidth: 48),
           decoration: BoxDecoration(
-            //color: Colors.white,
             borderRadius: BorderRadius.circular(radius),
             border: Border.all(color: const Color(0x11000000)),
-          //  boxShadow: const [BoxShadow(color: Color(0x0F000000), blurRadius: 8, offset: Offset(0, 2))],
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -480,7 +487,6 @@ class _FlagPill extends StatelessWidget {
   }
 }
 
-// поле телефона с кодом страны в prefix
 class _PhoneFieldWithCountry extends StatelessWidget {
   const _PhoneFieldWithCountry({
     required this.controller,
@@ -507,7 +513,7 @@ class _PhoneFieldWithCountry extends StatelessWidget {
         autovalidateMode: AutovalidateMode.onUserInteraction,
         style: const TextStyle(fontSize: 16),
         decoration: InputDecoration(
-          hintText: 'Mobile number',
+          hintText: t(context, 'phone.hint'), // "Mobile number"
           filled: true,
           fillColor: Colors.white,
           contentPadding: const EdgeInsets.fromLTRB(0, 18, 16, 18),
@@ -515,7 +521,7 @@ class _PhoneFieldWithCountry extends StatelessWidget {
           enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(radius), borderSide: BorderSide.none),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(radius),
-            borderSide: const BorderSide(color: kBrandYellowDark, width: 2),
+            borderSide: const BorderSide(color: Brand.yellowDark, width: 2),
           ),
           prefixIconConstraints: const BoxConstraints(minWidth: 78, minHeight: 0),
           prefixIcon: Padding(
@@ -534,11 +540,7 @@ class _PhoneFieldWithCountry extends StatelessWidget {
             ),
           ),
         ),
-        validator: (v) {
-          final digits = v?.replaceAll(RegExp(r'\D'), '') ?? '';
-          //if (digits.length < 7) return 'Enter valid number';
-          return null;
-        },
+        validator: (v) => null, // валидация у тебя была мягкая
       ),
     );
   }
@@ -652,7 +654,7 @@ class _CountryPickerSheetState extends State<_CountryPickerSheet> {
                   controller: _searchCtrl,
                   onChanged: _onSearch,
                   decoration: InputDecoration(
-                    hintText: 'Search country or code',
+                    hintText: t(context, 'phone.search_country'), // "Search country or code"
                     prefixIcon: const Icon(Icons.search),
                     isDense: true,
                     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),

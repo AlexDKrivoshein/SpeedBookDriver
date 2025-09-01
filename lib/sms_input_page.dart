@@ -12,10 +12,12 @@ import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:pin_code_fields/pin_code_fields.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:provider/provider.dart';
 
 import 'api_service.dart';
-import 'features/home/brand.dart'; // kBrandYellow, kBrandYellowDark
+import 'features/home/brand.dart';
 import 'messaging_service.dart';
+import 'translations.dart';
 
 class SmsInputPage extends StatefulWidget {
   final String phone;
@@ -37,7 +39,6 @@ class _SmsInputPageState extends State<SmsInputPage>
   MethodChannel('com.speedbook.taxidriver/config');
 
   final _formKey = GlobalKey<FormState>();
-  final TextEditingController smsController = TextEditingController();
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   late String _verificationId;
@@ -50,6 +51,7 @@ class _SmsInputPageState extends State<SmsInputPage>
   Timer? _ticker;
 
   bool _submitting = false;
+  String _code = ''; // <-- вместо TextEditingController
 
   @override
   void initState() {
@@ -65,7 +67,6 @@ class _SmsInputPageState extends State<SmsInputPage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _ticker?.cancel();
-    smsController.dispose();
     super.dispose();
   }
 
@@ -85,7 +86,13 @@ class _SmsInputPageState extends State<SmsInputPage>
   Future<void> _loadApiUrl() async {
     try {
       final url = await _configChannel.invokeMethod<String>('getApiUrl');
-      if (mounted) _apiUrl = url;
+      if (mounted) {
+        setState(() {
+          _apiUrl = url;
+        });
+      } else {
+        _apiUrl = url;
+      }
     } catch (e) {
       debugPrint('Error loading API_URL: $e');
     }
@@ -119,29 +126,45 @@ class _SmsInputPageState extends State<SmsInputPage>
   Future<void> _resendCode() async {
     if (_submitting) return;
     try {
+      final lang = context.read<Translations>().lang;
+      try {
+        await _auth.setLanguageCode(lang);
+      } catch (_) {}
+
       await _auth.verifyPhoneNumber(
         phoneNumber: widget.phone,
-        verificationCompleted: (PhoneAuthCredential credential) {
-          _handleAuth(credential);
+        verificationCompleted: (PhoneAuthCredential credential) async {
+          if (!mounted) return;
+          final ok = await _handleAuth(credential);
+          if (!mounted) return;
+          if (ok) {
+            ScaffoldMessenger.of(context)
+                .showSnackBar(SnackBar(content: Text(t(context, 'common.success'))));
+            Navigator.of(context).pushNamedAndRemoveUntil('/', (r) => false);
+          } else {
+            setState(() => _submitting = false);
+          }
         },
         verificationFailed: (FirebaseAuthException e) {
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: ${e.message ?? e.code}')),
+            SnackBar(content: Text('${t(context, 'common.error')}: ${e.message ?? e.code}')),
           );
         },
         codeSent: (String verificationId, int? resendToken) {
+          if (!mounted) return;
           _verificationId = verificationId;
           _startCountdown();
         },
         codeAutoRetrievalTimeout: (String verificationId) {
+          if (!mounted) return;
           _verificationId = verificationId;
         },
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error resending code: $e')),
+        SnackBar(content: Text('${t(context, 'sms.resend_error')}: $e')),
       );
     }
   }
@@ -178,37 +201,47 @@ class _SmsInputPageState extends State<SmsInputPage>
     return {'device': device, 'osVersion': osVersion};
   }
 
-  Future<void> _handleAuth(PhoneAuthCredential credential) async {
-    final currentLocale =
-        WidgetsBinding.instance.platformDispatcher.locale.languageCode;
-    final info = await PackageInfo.fromPlatform();
-
-    if (_apiUrl == null) {
-      await _loadApiUrl();
-      if (_apiUrl == null) return;
-    }
-
+  Future<bool> _handleAuth(PhoneAuthCredential credential) async {
     try {
-      setState(() => _submitting = true);
+      final prefs = await SharedPreferences.getInstance();
+      String user_country = prefs.getString('user_country') ?? '';
+      debugPrint('[SMSInput] user_country: $user_country');
 
       final userCredential = await _auth.signInWithCredential(credential);
       final user = userCredential.user;
       if (user == null) {
-        if (mounted) setState(() => _submitting = false);
-        return;
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(t(context, 'sms.signin_failed'))),
+          );
+        }
+        return false;
       }
 
-      final idToken = await user.getIdToken();
+      final idToken = await user.getIdToken(true);
       await MessagingService.I.init();
 
       final deviceInfo = await _getDeviceInfo();
       final fcmToken = await _getFcmTokenWithPermissions();
 
-      final platform = Platform.isAndroid
-          ? 'android'
-          : Platform.isIOS
-          ? 'ios'
-          : 'unknown';
+      if (_apiUrl == null) {
+        await _loadApiUrl();
+        if (_apiUrl == null) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(t(context, 'common.api_url_missing'))),
+            );
+          }
+          return false;
+        }
+      }
+
+      final currentLocale =
+          WidgetsBinding.instance.platformDispatcher.locale.languageCode;
+      final info = await PackageInfo.fromPlatform();
+      final platform =
+      Platform.isAndroid ? 'android' : (Platform.isIOS ? 'ios' : 'unknown');
+
 
       final urlStr = '${_apiUrl!}/api/auth_driver';
       final response = await http
@@ -228,73 +261,98 @@ class _SmsInputPageState extends State<SmsInputPage>
           'app_version': info.version,
           'fcm_token': fcmToken,
           'is_driver': true,
+          'region': user_country,
         }),
-      )
-          .timeout(const Duration(seconds: 10));
+      ).timeout(const Duration(seconds: 15));
 
-      if (response.statusCode == 200) {
-        try {
-          final Map<String, dynamic> json = jsonDecode(response.body);
-          if (json['status'] == 'OK') {
-            final token = json['data']?['token'];
-            final secret = json['data']?['secret'];
-            if (token is String) {
-              final prefs = await SharedPreferences.getInstance();
-              await prefs.setString('secret', secret);
-              await prefs.setString('token', token);
-//              await ApiService.loadTranslations();
-            }
-            if (!mounted) return;
-            final messenger = ScaffoldMessenger.of(context);
-            Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
-            messenger.showSnackBar(const SnackBar(content: Text('Success!')));
-          } else {
-            final errorMsg = json['status'] ?? 'Unknown error';
-            await FirebaseAuth.instance.signOut();
-            if (mounted) {
-              ScaffoldMessenger.of(context)
-                  .showSnackBar(SnackBar(content: Text(errorMsg.toString())));
-            }
-          }
-        } catch (_) {
-          if (!mounted) return;
+      debugPrint('[SMSInput] response code: $response.statusCode');
+
+      if (response.statusCode != 200) {
+        if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Invalid server response')),
+            SnackBar(content: Text('${t(context, 'common.backend_error')}: ${response.statusCode}')),
           );
         }
-      } else {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Backend error: ${response.statusCode}')),
-        );
+        return false;
       }
+
+      final Map<String, dynamic> json = jsonDecode(response.body);
+      debugPrint('[SMSInput] response body: $response.json');
+
+      if (json['status'] != 'OK') {
+        await FirebaseAuth.instance.signOut();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(json['status']?.toString() ?? t(context, 'common.unknown_error'))),
+          );
+        }
+        return false;
+      }
+
+      final token = json['data']?['token'];
+      final secret = json['data']?['secret'];
+      debugPrint('[SMSInput] token: $token, secret: $secret');
+
+      if (token is String && secret is String) {
+        await prefs.setString('secret', secret);
+        await prefs.setString('token', token);
+      }
+
+      return true;
     } on TimeoutException {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Server timeout')),
+          SnackBar(content: Text(t(context, 'common.timeout'))),
         );
       }
+      return false;
     } catch (e) {
+      debugPrint('[SMSInput] handle error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(content: Text('${t(context, 'common.error')}: $e')),
         );
       }
-    } finally {
-      if (mounted) setState(() => _submitting = false);
+      return false;
     }
   }
 
   Future<void> verifySmsCode() async {
-    if (!(_formKey.currentState?.validate() ?? false)) return;
-    final code = smsController.text.trim();
-    if (code.length != 6) return;
+    if (_submitting) return;
+    if (!mounted) return;
+
+    if (_code.length != 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(t(context, 'sms.enter_digits'))),
+      );
+      return;
+    }
+
+    if (_verificationId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(t(context, 'sms.code_expired'))),
+      );
+      return;
+    }
+
+    setState(() => _submitting = true);
 
     final credential = PhoneAuthProvider.credential(
       verificationId: _verificationId,
-      smsCode: code,
+      smsCode: _code,
     );
-    await _handleAuth(credential);
+
+    final ok = await _handleAuth(credential);
+
+    if (!mounted) return;
+
+    if (ok) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(t(context, 'common.success'))));
+      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+    } else {
+      setState(() => _submitting = false);
+    }
   }
 
   void _goBackToPhone() {
@@ -308,14 +366,12 @@ class _SmsInputPageState extends State<SmsInputPage>
   @override
   Widget build(BuildContext context) {
     final h = MediaQuery.of(context).size.height;
-// адаптивный отступ под макет: ~30% высоты экрана, но не меньше 96 и не больше 160
     final clampedTopExtra = (h * 0.30).clamp(96.0, 160.0) as double;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7FBFB),
       body: Stack(
         children: [
-          // ── верхний бренд-бэнд с картинкой
           Positioned(
             top: 0,
             left: 0,
@@ -335,7 +391,6 @@ class _SmsInputPageState extends State<SmsInputPage>
             ),
           ),
 
-          // ── контент
           SafeArea(
             child: Padding(
               padding: EdgeInsets.fromLTRB(24, 24 + clampedTopExtra, 24, 24),
@@ -346,11 +401,10 @@ class _SmsInputPageState extends State<SmsInputPage>
                   children: [
                     const SizedBox(height: 8),
 
-                    // заголовок
-                    const Text(
-                      'Enter the code from the push\nnotification',
+                    Text(
+                      t(context, 'sms.title'),
                       textAlign: TextAlign.center,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 22,
                         height: 1.25,
                         fontWeight: FontWeight.w700,
@@ -359,7 +413,6 @@ class _SmsInputPageState extends State<SmsInputPage>
                     ),
                     const SizedBox(height: 20),
 
-                    // карточка уведомления — увеличенная
                     Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 16, vertical: 18),
@@ -375,13 +428,13 @@ class _SmsInputPageState extends State<SmsInputPage>
                         ],
                       ),
                       child: Row(
-                        children: const [
-                          Icon(Icons.notifications_none_rounded, size: 32),
-                          SizedBox(width: 12),
+                        children: [
+                          const Icon(Icons.notifications_none_rounded, size: 32),
+                          const SizedBox(width: 12),
                           Expanded(
                             child: Text(
-                              'Check your push notifications',
-                              style: TextStyle(
+                              t(context, 'sms.check_push'),
+                              style: const TextStyle(
                                 fontSize: 17,
                                 fontWeight: FontWeight.w600,
                                 color: Colors.black87,
@@ -394,19 +447,18 @@ class _SmsInputPageState extends State<SmsInputPage>
 
                     const SizedBox(height: 28),
 
-                    // PIN — подчёркнутые слоты
                     PinCodeTextField(
-                      controller: smsController,
                       appContext: context,
                       length: 6,
                       autoFocus: true,
                       keyboardType: TextInputType.number,
                       cursorColor: Colors.black,
                       animationType: AnimationType.none,
-                      onChanged: (_) {},
+                      onChanged: (val) => _code = val,
+                      onCompleted: (val) => _code = val,
                       validator: (value) =>
                       (value == null || value.length != 6)
-                          ? 'Enter 6 digits'
+                          ? t(context, 'sms.enter_digits')
                           : null,
                       pinTheme: PinTheme(
                         shape: PinCodeFieldShape.underline,
@@ -424,7 +476,6 @@ class _SmsInputPageState extends State<SmsInputPage>
 
                     const SizedBox(height: 22),
 
-                    // Next
                     SizedBox(
                       width: double.infinity,
                       height: 56,
@@ -443,16 +494,14 @@ class _SmsInputPageState extends State<SmsInputPage>
                             ? const SizedBox(
                           width: 22,
                           height: 22,
-                          child:
-                          CircularProgressIndicator(strokeWidth: 2),
+                          child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                            : const Text('Next'),
+                            : Text(t(context, 'sms.next')),
                       ),
                     ),
 
                     const SizedBox(height: 12),
 
-                    // Get a new code (ValueNotifier)
                     ValueListenableBuilder<bool>(
                       valueListenable: _canResendVN,
                       builder: (context, canResend, _) {
@@ -460,8 +509,8 @@ class _SmsInputPageState extends State<SmsInputPage>
                           valueListenable: _secondsVN,
                           builder: (context, secondsLeft, __) {
                             final text = canResend
-                                ? 'Get a new code'
-                                : 'Get a new code   ${secondsLeft ~/ 60}:${(secondsLeft % 60).toString().padLeft(2, '0')}';
+                                ? t(context, 'sms.get_new_code')
+                                : '${t(context, 'sms.get_new_code')}   ${secondsLeft ~/ 60}:${(secondsLeft % 60).toString().padLeft(2, '0')}';
 
                             return SizedBox(
                               width: double.infinity,
@@ -496,7 +545,6 @@ class _SmsInputPageState extends State<SmsInputPage>
             ),
           ),
 
-          // круглая кнопка "назад" (слева под бэндом)
           Positioned(
             top: 16,
             left: 16,

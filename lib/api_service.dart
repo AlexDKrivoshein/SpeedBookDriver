@@ -60,7 +60,8 @@ class ApiService {
     final token  = prefs.getString('token');
     final secret = prefs.getString('secret');
 
-    debugPrint('[ApiService] Ensure token');
+    debugPrint('[ApiService] Ensure token, validate: $validateOnline');
+    debugPrint('[ApiService] Token: $token, secret: $secret');
 
     final missing = token == null || token.isEmpty || secret == null || secret.isEmpty;
     if (missing) {

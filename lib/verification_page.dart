@@ -88,7 +88,7 @@ class _VerificationPageState extends State<VerificationPage> {
       };
 
       await ApiService.callAndDecode('submit_verification', payload)
-          .timeout(const Duration(seconds: 25));
+          .timeout(const Duration(seconds: 120));
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

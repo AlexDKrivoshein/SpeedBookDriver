@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 
 class Brand {
   // Яркий «таксичный» жёлтый + тёмный текст
-  static const Color yellow = Color(0xFFFFC107); // основной
-  static const Color yellowDark = Color(0xFFFFB300); // акцент/hover
+  static const Color yellow = Color(0xFFFFEB00); // основной
+  static const Color yellowDark = Color(0xFFFFD600); // акцент/hover
   static const Color textDark = Color(0xFF1B1B1B);
   static const Color textMuted = Color(0xFF6B6B6B);
-  static const Color border = Color(0x14000000); // слабая чёрная для бордера
+  static const Color border = Color(0x14000000);
 
   static ThemeData theme(ThemeData base) {
     final scheme = base.colorScheme.copyWith(

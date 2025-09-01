@@ -1,14 +1,19 @@
+// lib/main.dart
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'api_service.dart';
 import 'home_page.dart';
 import 'phone_input_page.dart';
 import 'location_service.dart';
 import 'permission_helper.dart';
+import 'onboarding_page.dart';
+import 'translations.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -34,19 +39,44 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      navigatorKey: navigatorKey,
-      title: 'SpeedBook taxi driver',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: Colors.blue,
+    // ⮟ Провайдер переводов + реактивная обёртка всего приложения
+    return ChangeNotifierProvider<Translations>(
+      create: (_) => Translations()..init(),
+      child: Consumer<Translations>(
+        builder: (context, i18n, _) {
+          return TranslationsScope(
+            tick: i18n.tick, // любое изменение языка триггерит перестройку
+            child: MaterialApp(
+              navigatorKey: navigatorKey,
+              title: 'SpeedBook taxi driver',
+              debugShowCheckedModeBanner: false,
+              theme: ThemeData(
+                useMaterial3: true,
+                colorSchemeSeed: Colors.blue,
+              ),
+
+              // вот эти строки:
+              locale: Locale(i18n.lang), // язык из нашего провайдера Translations
+              supportedLocales: const [
+                Locale('en'),
+                Locale('ru'),
+                Locale('km'),
+              ],
+              localizationsDelegates: const [
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+
+              routes: {
+                '/': (_) => const _Root(),
+                '/login': (_) => const PhoneInputPage(),
+              },
+              initialRoute: '/',
+            ),
+          );
+        },
       ),
-      routes: {
-        '/': (_) => const _Root(),
-        '/login': (_) => const PhoneInputPage(), // убедись, что конструктор const
-      },
-      initialRoute: '/',
     );
   }
 }
@@ -59,57 +89,126 @@ class _Root extends StatefulWidget {
 }
 
 class _RootState extends State<_Root> {
+  bool? _needOnboarding;   // null = загрузка
   bool _checkingInit = true;
   bool _isLoggedIn = false;
 
   @override
   void initState() {
     super.initState();
+    _decideOnboarding();
+  }
 
+  Future<bool> _hasBackendSession() async {
+    final prefs = await SharedPreferences.getInstance();
+    final hasToken  = (prefs.getString('token')  ?? '').isNotEmpty;
+    final hasSecret = (prefs.getString('secret') ?? '').isNotEmpty;
+    return hasToken && hasSecret;
+  }
+
+  /// Ждём пока SmsInputPage сохранит token/secret (макс. ~3 секунды)
+  Future<bool> _waitForBackendSession({Duration timeout = const Duration(seconds: 3)}) async {
+    final start = DateTime.now();
+    while (DateTime.now().difference(start) < timeout) {
+      if (await _hasBackendSession()) return true;
+      await Future.delayed(const Duration(milliseconds: 120));
+    }
+    return await _hasBackendSession();
+  }
+
+  Future<void> _decideOnboarding() async {
+    final prefs = await SharedPreferences.getInstance();
+    final done = prefs.getBool('onboarding_done') == true;
+    setState(() => _needOnboarding = !done);
+
+    if (!mounted) return;
+    if (_needOnboarding == true) {
+      setState(() => _checkingInit = false); // покажем онбординг
+    } else {
+      _attachAuthListener(); // обычный флоу
+    }
+  }
+
+  Future<void> _markOnboardingDone() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('onboarding_done', true);
+  }
+
+  void _onOnboardingDone() async {
+    await _markOnboardingDone();
+    if (!mounted) return;
+    setState(() {
+      _needOnboarding = false;
+      _checkingInit = true;
+    });
+    _attachAuthListener();
+  }
+
+  void _attachAuthListener() {
     FirebaseAuth.instance.authStateChanges().listen((user) async {
       _isLoggedIn = user != null;
-      debugPrint('[Main] is logged: $_isLoggedIn');
 
       if (_isLoggedIn) {
+        // 1) Ждём пока SmsInputPage сохранит token/secret
+        final sessionReady = await _waitForBackendSession();
+        if (!sessionReady) {
+          // Не дождались — считаем, что сессии нет, покажем экран логина
+          if (mounted) setState(() => _checkingInit = false);
+          return;
+        }
+
         try {
-          // 1) Проверяем токен онлайн и получаем профиль (в т.ч. язык)
+          // 2) Теперь безопасно: токены точно есть
           final profile = await ApiService.checkTokenOnline(validateOnline: true);
 
-          // 2) Язык пользователя из профиля, иначе — язык системы
-          final userLang = (profile['lang'] as String?)?.toLowerCase() ??
-              ui.window.locale.languageCode.toLowerCase();
+          // 3) Язык: сохранённый/с профиля → загрузка переводов
+          final prefs = await SharedPreferences.getInstance();
+          final savedLang = (prefs.getString('user_lang') ?? '').toLowerCase();
+          final userLang = savedLang.isNotEmpty
+              ? savedLang
+              : (profile['lang'] as String?)?.toLowerCase()
+              ?? ui.window.locale.languageCode.toLowerCase();
 
-          // 3) Грузим переводы под язык пользователя
           await ApiService.loadTranslations(lang: userLang);
+          if (mounted) {
+            await context.read<Translations>().setLang(userLang);
+          }
         } catch (_) {
-          // onAuthFailed уже сделал редирект на /login
+          // Если проверка токена всё же провалилась — редиректом займётся onAuthFailed
           return;
         }
       } else {
-        // Гость — грузим переводы по системному языку
-        final sysLang = ui.window.locale.languageCode.toLowerCase();
-        await ApiService.loadTranslations(lang: sysLang);
+        // Гость: берём выбранный язык (с онбординга) или системный
+        final prefs = await SharedPreferences.getInstance();
+        final savedLang = (prefs.getString('user_lang') ?? '').toLowerCase();
+        final guestLang = savedLang.isNotEmpty
+            ? savedLang
+            : ui.window.locale.languageCode.toLowerCase();
+
+        await ApiService.loadTranslations(lang: guestLang);
+        if (mounted) {
+          await context.read<Translations>().setLang(guestLang);
+        }
       }
 
-      if (mounted) {
-        setState(() => _checkingInit = false);
-      }
+      if (mounted) setState(() => _checkingInit = false);
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_checkingInit) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+    if (_needOnboarding == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-
+    if (_needOnboarding == true) {
+      return OnboardingPage(onDone: _onOnboardingDone);
+    }
+    if (_checkingInit) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
     if (!_isLoggedIn) {
       return const PhoneInputPage();
     }
-
-    // Пользователь залогинен и переводы загружены
     return ChangeNotifierProvider<LocationService>(
       create: (ctx) => LocationService(
         onDeniedForever: () => showLocationPermissionDialog(ctx),
