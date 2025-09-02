@@ -1,17 +1,19 @@
 {
   "app.title": "SpeedBook",
 
-  "phone.title_top": "Get started with",
-  "phone.title_app": "SpeedBook driver",
-  "phone.hint": "Mobile number",
+  "phone.hero.prefix": "Making traveling in Cambodia comfortable and safe at the best price with ",
+  "phone.hero.brand": "SpeedBook!",
   "phone.register": "Register",
+  "phone.hint": "Mobile number",
   "phone.enter_number": "Enter phone number",
   "phone.verification_failed": "Verification failed",
   "phone.failed_start": "Failed to start verification",
-  "phone.terms.caption": "By logging in or registering you agree to our Terms of Service and Privacy Policy",
+  "phone.terms.caption": "By logging in our registering you agree to our Terms of Service and Privacy Policy",
   "phone.terms.link": "Terms and Conditions",
   "phone.privacy.link": "Privacy Policy",
   "phone.search_country": "Search country or code",
+  "phone.established": "Established in Cambodia",
+
 
   "sms.title": "Enter the code from the push\nnotification",
   "sms.check_push": "Check your push notifications",
@@ -28,6 +30,7 @@
   "common.backend_error": "Backend error",
   "common.api_url_missing": "API URL not available",
   "common.unknown_error": "Unknown error",
+
 
   "btn.book": "Book",
   "from.select": "From where?",

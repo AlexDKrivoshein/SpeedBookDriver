@@ -1,8 +1,8 @@
 {
   "app.title": "SpeedBook",
 
-  "phone.title_top": "Начните со",
-  "phone.title_app": "SpeedBook driver",
+  "phone.hero.prefix": "Сделаем поездки по Камбодже комфортными и безопасными по лучшей цене вместе с ",
+  "phone.hero.brand": "SpeedBook!",
   "phone.hint": "Номер телефона",
   "phone.register": "Зарегистрироваться",
   "phone.enter_number": "Введите номер телефона",
@@ -12,6 +12,7 @@
   "phone.terms.link": "Условия использования",
   "phone.privacy.link": "Политика конфиденциальности",
   "phone.search_country": "Поиск страны или кода",
+  "phone.established": "Основано в Камбодже",
 
   "sms.title": "Введите код из push-уведомления",
   "sms.check_push": "Проверьте ваши push-уведомления",

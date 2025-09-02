@@ -7,9 +7,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:provider/provider.dart';
 
-import 'brand.dart';
+import 'brand.dart';                 // Brand.yellow / Brand.yellowDark
 import 'sms_input_page.dart';
-import 'translations.dart'; // t(context, key)
+import 'translations.dart';          // t(context, key)
 
 class PhoneInputPage extends StatefulWidget {
   const PhoneInputPage({super.key});
@@ -18,41 +18,29 @@ class PhoneInputPage extends StatefulWidget {
 }
 
 class _PhoneInputPageState extends State<PhoneInputPage> {
-  // === ассеты (подстрой пути под свои файлы) ===
-  static const _assetWordmark = 'assets/brand/speedbook.png';
-  static const _assetArchBg   = 'assets/brand/intro_arch.png';
-  static const _assetTemple   = 'assets/brand/temple.png';
-  static const _assetCar      = 'assets/brand/car.png';
-  static const _assetIconBg   = 'assets/brand/icon_bg.png';
-  static const _assetSbLogo   = 'assets/brand/sb_logo.png';
+  // ассеты под макет
+  static const _assetLogoBanner = 'assets/brand/speedbooknew.png';
+  static const _assetPattern    = 'assets/brand/background.png';
 
   static const double _kFieldHeight = 56;
-  static const double _kRadius = 16;
+  static const double _kRadius = 18;
 
   final _phoneCtrl = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
-  // Firebase flow state
   bool _submitting = false;
   String? _verificationId;
   int? _resendToken;
 
-  Country _country =
-  kCountries.firstWhere((c) => c.iso2 == 'KH', orElse: () => kCountries.first);
-  bool _carAnimStart = false;
+  Country _country = kCountries.firstWhere(
+        (c) => c.iso2 == 'KH',
+    orElse: () => kCountries.first,
+  );
 
   @override
   void dispose() {
     _phoneCtrl.dispose();
     super.dispose();
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    Future.delayed(const Duration(milliseconds: 350), () {
-      if (mounted) setState(() => _carAnimStart = true);
-    });
   }
 
   Future<void> _pickCountry() async {
@@ -65,7 +53,6 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
     if (picked != null && mounted) setState(() => _country = picked);
   }
 
-  // Отправка номера в Firebase
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -81,11 +68,9 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
 
     setState(() => _submitting = true);
     try {
-      // язык SMS: берём из Translations.lang
       final lang = context.read<Translations>().lang;
       try {
         await FirebaseAuth.instance.setLanguageCode(lang);
-        // Если нужно — включить/выключить специальные режимы:
         // await FirebaseAuth.instance.setSettings(
         //   appVerificationDisabledForTesting: false,
         //   forceRecaptchaFlow: kDebugMode,
@@ -97,11 +82,8 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
         timeout: const Duration(seconds: 60),
         forceResendingToken: _resendToken,
         verificationCompleted: (PhoneAuthCredential credential) async {
-          // Android может автоподтвердить — попробуем залогиниться
           try { await FirebaseAuth.instance.signInWithCredential(credential); } catch (_) {}
           if (!mounted) return;
-          // Можно сразу навигировать на главный, если автологин удался
-          // Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false);
         },
         verificationFailed: (FirebaseAuthException e) {
           if (!mounted) return;
@@ -115,8 +97,6 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
           _resendToken = resendToken;
           if (!mounted) return;
           setState(() => _submitting = false);
-
-          // Переходим на экран ввода кода
           Navigator.of(context).push(
             MaterialPageRoute(
               builder: (_) => SmsInputPage(
@@ -142,7 +122,7 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
   }
 
   void _openUrl(String url) {
-    // TODO: подключить url_launcher
+    // TODO: url_launcher
     debugPrint('Open URL: $url');
   }
 
@@ -150,221 +130,179 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
   Widget build(BuildContext context) {
     final size  = MediaQuery.of(context).size;
     final theme = Theme.of(context);
-    final double cardBase = size.width > 420 ? 420 : size.width;
-
     final insets = MediaQuery.of(context).viewInsets;
     final keyboard = insets.bottom > 0;
 
-    // высота нижней панели с Terms/Privacy
-    const bottomPanelHeight = 96.0;
+    const bottomPanelHeight = 120.0;
+    final headerHeight = size.height * 0.44;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7FBFB),
       body: Stack(
         children: [
-          // верхний бренд-бэнд
+          // Верхний жёлтый блок с паттерном
           Positioned(
             top: 0, left: 0, right: 0,
-            child: Container(
-              height: 64,
-              color: Brand.yellow,
-              alignment: Alignment.center,
-              child: Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Image.asset(
-                  _assetWordmark,
-                  height: 24,
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) => Text(
-                    'SpeedBook',
-                    style: theme.textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w700, color: Colors.black87),
-                  ),
+            child: ClipRRect(
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(36),
+                bottomRight: Radius.circular(36),
+              ),
+              child: SizedBox(
+                height: headerHeight,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // фон — сразу картинка
+                    Image.asset(
+                      _assetPattern,
+                      repeat: ImageRepeat.repeat,
+                      fit: BoxFit.none,          // важно: не растягиваем плитку
+                      alignment: Alignment.topLeft,
+                    ),
+
+                    // логотип
+                    Align(
+                      alignment: Alignment.topCenter,
+                      child: SafeArea(
+                        bottom: false,
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 48), // было 36
+                          child: Image.asset(
+                            _assetLogoBanner,
+                            height: 110, // было 96
+                            fit: BoxFit.contain,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
           ),
-
-          // фоновая дуга (опущена ниже бэнда)
-          Positioned(
-            top: 80,
-            left: -size.width * 0.10,
-            right: -size.width * 0.10,
-            child: IgnorePointer(
-              child: Image.asset(
-                _assetArchBg,
-                height: size.width * 0.95,
-                fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-              ),
-            ),
-          ),
-
-          // прокручиваемый контент
-          SafeArea(
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 420),
-                child: SingleChildScrollView(
-                  padding: EdgeInsets.fromLTRB(
-                    24,
-                    24 + 64,
-                    24,
-                    (keyboard ? 16 : bottomPanelHeight + 16) + insets.bottom,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      // иконка SB (в белой карточке)
-                      _AppIcon(logoAsset: _assetSbLogo, cardAsset: _assetIconBg),
-
-                      const SizedBox(height: 12),
-                      Text(
-                        t(context, 'phone.title_top'), // "Get started with"
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w400, color: Colors.black87,
-                        ),
+          // Контент (белая карточка со скруглением)
+          Positioned.fill(
+            child: SafeArea(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  headerHeight - 40, // карточка немного «заходит» на жёлтый блок
+                  16,
+                  (keyboard ? 16 : bottomPanelHeight) + insets.bottom,
+                ),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 420),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(24),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x14000000),
+                            blurRadius: 18,
+                            offset: Offset(0, 8),
+                          ),
+                        ],
                       ),
-                      Text(
-                        t(context, 'phone.title_app'), // "SpeedBook driver"
-                        style: theme.textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w700, color: Colors.black87,
-                        ),
-                      ),
-
-                      const SizedBox(height: 18),
-
-                      // карточка-иллюстрация
-                      Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(24),
-                        ),
-                        clipBehavior: Clip.none,
-                        padding: const EdgeInsets.symmetric(vertical: 22),
-                        child: LayoutBuilder(
-                          builder: (context, constraints) {
-                            return Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                // храм
-                                Image.asset(
-                                  _assetTemple,
-                                  width: constraints.maxWidth * 0.62,
-                                  fit: BoxFit.contain,
-                                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                      padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          // Слоган: обычный текст + жёлтое "SpeedBook!"
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            child: RichText(
+                              textAlign: TextAlign.center,
+                              text: TextSpan(
+                                style: const TextStyle(
+                                  fontSize: 24,          // увеличили
+                                  fontWeight: FontWeight.w700,
+                                  height: 1.4,
+                                  color: Colors.black87,
                                 ),
-                                // машинка выезжает слева
-                                Positioned(
-                                  left: 12,
-                                  bottom: 6,
-                                  child: LayoutBuilder(builder: (context, constraints) {
-                                    final carW = cardBase * 0.38;
-                                    final offscreen = -cardBase * 0.80;
-
-                                    return TweenAnimationBuilder<double>(
-                                      duration: const Duration(milliseconds: 1700),
-                                      curve: Curves.easeOutCubic,
-                                      tween: Tween(begin: 0, end: _carAnimStart ? 1 : 0),
-                                      builder: (_, tVal, child) {
-                                        final dx = lerpDouble(offscreen, 0, tVal)!;
-                                        return Transform.translate(offset: Offset(dx, 0), child: child);
-                                      },
-                                      child: SizedBox(
-                                        width: carW,
-                                        child: Stack(
-                                          children: [
-                                            // тень
-                                            Transform.translate(
-                                              offset: const Offset(2, 6),
-                                              child: ImageFiltered(
-                                                imageFilter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
-                                                child: ColorFiltered(
-                                                  colorFilter: const ColorFilter.mode(Colors.black38, BlendMode.srcATop),
-                                                  child: Image.asset(_assetCar, width: carW, fit: BoxFit.contain),
-                                                ),
-                                              ),
-                                            ),
-                                            // машина
-                                            Image.asset(_assetCar, width: carW, fit: BoxFit.contain),
-                                          ],
-                                        ),
-                                      ),
-                                    );
-                                  }),
-                                ),
-                              ],
-                            );
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-
-                      // форма
-                      Form(
-                        key: _formKey,
-                        child: Column(
-                          children: [
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                // пилюля с флагом (смена страны)
-                                _FlagPill(
-                                  country: _country,
-                                  onTap: _pickCountry,
-                                  height: _kFieldHeight,
-                                  radius: _kRadius,
-                                ),
-                                const SizedBox(width: 10),
-                                // поле телефона с кодом в prefix
-                                Expanded(
-                                  child: _PhoneFieldWithCountry(
-                                    controller: _phoneCtrl,
-                                    country: _country,
-                                    onPickCountry: _pickCountry,
-                                    height: _kFieldHeight,
-                                    radius: _kRadius,
+                                children: [
+                                  TextSpan(text: t(context, 'phone.hero.prefix') + '\n',),
+                                  TextSpan(
+                                    text: t(context, 'phone.hero.brand'),
+                                    style: const TextStyle(
+                                      fontSize: 24,      // совпадает с основным
+                                      fontWeight: FontWeight.w900,
+                                      color: Brand.yellowDark,
+                                    ),
                                   ),
-                                ),
-                              ],
-                            ),
-
-                            const SizedBox(height: 18),
-
-                            // кнопка регистрации
-                            SizedBox(
-                              width: double.infinity,
-                              height: 56,
-                              child: ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFFDCCFB5),
-                                  foregroundColor: Colors.black87,
-                                  shadowColor: Colors.transparent,
-                                  textStyle: const TextStyle(
-                                      fontSize: 18, fontWeight: FontWeight.w600),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(_kRadius),
-                                  ),
-                                ),
-                                onPressed: _submitting ? null : _submit,
-                                child: _submitting
-                                    ? const SizedBox(
-                                  width: 22, height: 22,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                )
-                                    : Text(t(context, 'phone.register')), // "Register"
+                                ],
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(height: 20),
+
+                          // Форма
+                          Form(
+                            key: _formKey,
+                            child: Column(
+                              children: [
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    _FlagPill(
+                                      country: _country,
+                                      onTap: _pickCountry,
+                                      height: _kFieldHeight,
+                                      radius: 16,
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: _PhoneFieldWithCountry(
+                                        controller: _phoneCtrl,
+                                        country: _country,
+                                        onPickCountry: _pickCountry,
+                                        height: _kFieldHeight,
+                                        radius: 16,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 18),
+
+                                // Кнопка
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: 56,
+                                  child: ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Brand.yellow,
+                                      foregroundColor: Colors.black87,
+                                      shadowColor: Colors.transparent,
+                                      textStyle: const TextStyle(
+                                          fontSize: 18, fontWeight: FontWeight.w700),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                    ),
+                                    onPressed: _submitting ? null : _submit,
+                                    child: _submitting
+                                        ? const SizedBox(
+                                      width: 22, height: 22,
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    )
+                                        : Text(t(context, 'phone.register')),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),
             ),
           ),
 
-          // нижняя панель Terms/Privacy
+          // Нижняя панель
           Positioned(
             left: 0, right: 0, bottom: 0,
             child: SafeArea(
@@ -382,7 +320,10 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
                         Text(
                           t(context, 'phone.terms.caption'),
                           textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.black54),
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(color: Colors.black54),
                         ),
                         const SizedBox(height: 8),
                         Wrap(
@@ -399,6 +340,14 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
                             ),
                           ],
                         ),
+                        const SizedBox(height: 6),
+                        Text(
+                          t(context, 'phone.established'),
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(color: Colors.black54),
+                        ),
                       ],
                     ),
                   ),
@@ -414,61 +363,33 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
 
 // ─── helpers ───
 
-class _AppIcon extends StatelessWidget {
-  const _AppIcon({required this.logoAsset, required this.cardAsset});
-  final String logoAsset;
-  final String cardAsset;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 84, height: 84,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: Image.asset(
-              cardAsset, fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => const ColoredBox(color: Colors.white),
-            ),
-          ),
-          Center(
-            child: Image.asset(
-              logoAsset, height: 36, fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-String flagFromIso(String iso2) {
-  final cc = iso2.toUpperCase();
-  return String.fromCharCodes(cc.codeUnits.map((c) => 0x1F1E6 + (c - 65)));
-}
-
 class _FlagPill extends StatelessWidget {
-  const _FlagPill({required this.country, required this.onTap, required this.height, required this.radius});
-  final Country country; final VoidCallback onTap; final double height; final double radius;
+  const _FlagPill({
+    required this.country,
+    required this.onTap,
+    required this.height,
+    required this.radius,
+  });
+  final Country country;
+  final VoidCallback onTap;
+  final double height;
+  final double radius;
 
   @override
   Widget build(BuildContext context) {
     final String flagText =
-    (country.flag.isNotEmpty ? country.flag : flagFromIso(country.iso2));
-
+    country.flag.isNotEmpty ? country.flag : flagFromIso(country.iso2);
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(radius),
+      elevation: 2,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(radius),
         child: Container(
           height: height,
           padding: const EdgeInsets.symmetric(horizontal: 14),
-          constraints: const BoxConstraints(minWidth: 48),
+          constraints: const BoxConstraints(minWidth: 56),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(radius),
             border: Border.all(color: const Color(0x11000000)),
@@ -485,6 +406,12 @@ class _FlagPill extends StatelessWidget {
       ),
     );
   }
+}
+
+// флаг по ISO
+String flagFromIso(String iso2) {
+  final cc = iso2.toUpperCase();
+  return String.fromCharCodes(cc.codeUnits.map((c) => 0x1F1E6 + (c - 65)));
 }
 
 class _PhoneFieldWithCountry extends StatelessWidget {
@@ -513,17 +440,23 @@ class _PhoneFieldWithCountry extends StatelessWidget {
         autovalidateMode: AutovalidateMode.onUserInteraction,
         style: const TextStyle(fontSize: 16),
         decoration: InputDecoration(
-          hintText: t(context, 'phone.hint'), // "Mobile number"
+          hintText: t(context, 'phone.hint'),
           filled: true,
           fillColor: Colors.white,
           contentPadding: const EdgeInsets.fromLTRB(0, 18, 16, 18),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(radius), borderSide: BorderSide.none),
-          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(radius), borderSide: BorderSide.none),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(radius),
+            borderSide: BorderSide.none,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(radius),
+            borderSide: BorderSide.none,
+          ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(radius),
             borderSide: const BorderSide(color: Brand.yellowDark, width: 2),
           ),
-          prefixIconConstraints: const BoxConstraints(minWidth: 78, minHeight: 0),
+          prefixIconConstraints: const BoxConstraints(minWidth: 86, minHeight: 0),
           prefixIcon: Padding(
             padding: const EdgeInsets.only(left: 12, right: 8),
             child: InkWell(
@@ -532,7 +465,9 @@ class _PhoneFieldWithCountry extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(country.dialCode, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                  // только код страны, как на макете
+                  Text(country.dialCode,
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
                   const SizedBox(width: 10),
                   Container(width: 1, height: 22, color: const Color(0x22000000)),
                 ],
@@ -540,7 +475,7 @@ class _PhoneFieldWithCountry extends StatelessWidget {
             ),
           ),
         ),
-        validator: (v) => null, // валидация у тебя была мягкая
+        validator: (_) => null,
       ),
     );
   }
@@ -548,22 +483,27 @@ class _PhoneFieldWithCountry extends StatelessWidget {
 
 class _Link extends StatelessWidget {
   const _Link({required this.text, required this.onTap});
-  final String text; final VoidCallback onTap;
+  final String text;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap, behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
       child: Text(
         text,
-        style: const TextStyle(fontSize: 13, color: Color(0xFF4B79C4), decoration: TextDecoration.underline),
+        style: const TextStyle(
+          fontSize: 13,
+          color: Color(0xFF4B79C4),
+          decoration: TextDecoration.underline,
+        ),
       ),
     );
   }
 }
 
 // === Страны ===
-
 class Country {
   final String name;
   final String iso2;
@@ -603,7 +543,6 @@ const List<Country> kCountries = [
 ];
 
 // === Country picker (bottom sheet) ===
-
 class _CountryPickerSheet extends StatefulWidget {
   const _CountryPickerSheet();
 
@@ -640,13 +579,21 @@ class _CountryPickerSheetState extends State<_CountryPickerSheet> {
       child: Padding(
         padding: EdgeInsets.only(bottom: pad),
         child: Material(
-          borderRadius: const BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
+          borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(16), topRight: Radius.circular(16)),
           clipBehavior: Clip.antiAlias,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               const SizedBox(height: 10),
-              Container(width: 42, height: 4, decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(2))),
+              Container(
+                width: 42,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.black26,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
               const SizedBox(height: 12),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -654,11 +601,16 @@ class _CountryPickerSheetState extends State<_CountryPickerSheet> {
                   controller: _searchCtrl,
                   onChanged: _onSearch,
                   decoration: InputDecoration(
-                    hintText: t(context, 'phone.search_country'), // "Search country or code"
+                    hintText: t(context, 'phone.search_country'),
                     prefixIcon: const Icon(Icons.search),
                     isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 12,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                 ),
               ),
@@ -671,9 +623,13 @@ class _CountryPickerSheetState extends State<_CountryPickerSheet> {
                   itemBuilder: (_, i) {
                     final c = _filtered[i];
                     return ListTile(
-                      leading: Text(c.flag, style: const TextStyle(fontSize: 22)),
+                      leading:
+                      Text(c.flag, style: const TextStyle(fontSize: 22)),
                       title: Text(c.name),
-                      trailing: Text(c.dialCode, style: const TextStyle(fontWeight: FontWeight.w600)),
+                      trailing: Text(
+                        c.dialCode,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
                       onTap: () => Navigator.of(context).pop(c),
                     );
                   },

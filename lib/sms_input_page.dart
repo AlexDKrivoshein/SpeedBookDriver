@@ -15,7 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
 
 import 'api_service.dart';
-import 'features/home/brand.dart';
+import 'brand.dart';
 import 'messaging_service.dart';
 import 'translations.dart';
 
@@ -378,7 +378,7 @@ class _SmsInputPageState extends State<SmsInputPage>
             right: 0,
             child: Container(
               height: 64,
-              color: kBrandYellow,
+              color: Brand.yellow,
               alignment: Alignment.center,
               child: Padding(
                 padding: const EdgeInsets.only(top: 4),

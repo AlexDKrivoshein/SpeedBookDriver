@@ -1,8 +1,7 @@
 {
   "app.title": "SpeedBook",
-
-  "phone.title_top": "ចាប់ផ្តើមជាមួយ",
-  "phone.title_app": "SpeedBook driver",
+  "phone.hero.prefix": "ធ្វើឱ្យការធ្វើដំណើរនៅកម្ពុជា មានផាសុខភាព និងមានសុវត្ថិភាព ក្នុងតម្លៃល្អបំផុត ជាមួយ ",
+  "phone.hero.brand": "SpeedBook!",
   "phone.hint": "លេខទូរស័ព្ទ",
   "phone.register": "ចុះឈ្មោះ",
   "phone.enter_number": "បញ្ចូលលេខទូរស័ព្ទ",
@@ -12,7 +11,7 @@
   "phone.terms.link": "លក្ខខណ្ឌនិងកិច្ចព្រមព្រៀង",
   "phone.privacy.link": "គោលការណ៍ឯកជនភាព",
   "phone.search_country": "ស្វែងរកប្រទេស ឬកូដ",
-
+  "phone.established": "បង្កើតនៅកម្ពុជា"m,
   "sms.title": "បញ្ចូលកូដពីការជូនដំណឹង",
   "sms.check_push": "ពិនិត្យការជូនដំណឹង push របស់អ្នក",
   "sms.enter_digits": "បញ្ចូលលេខ ៦ ខ្ទង់",
