@@ -1,4 +1,4 @@
-package com.speedbook.taxidriver
+package com.speedbook.driver
 
 import android.content.pm.PackageManager
 import android.os.Bundle

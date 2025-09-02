@@ -7,15 +7,15 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:913707138422:android:18f8dd576c465245008e57",
+        "mobilesdk_app_id": "1:913707138422:android:4900a86b161c24ae008e57",
         "android_client_info": {
-          "package_name": "com.speedbook.taxidriver"
+          "package_name": "com.speedbook.driver"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyD-UgeKTdqBYwVDXwn0F9ca5Axww_BHJeI"
+          "current_key": "AIzaSyDNxKfD2ezcsb7EszdWq1Z-TTDH2qjqlpI"
         }
       ],
       "services": {

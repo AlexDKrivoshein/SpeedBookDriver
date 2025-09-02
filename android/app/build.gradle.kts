@@ -18,7 +18,7 @@ val keystoreProperties = Properties().apply {
 }
 
 android {
-    namespace = "com.speedbook.taxidriver"
+    namespace = "com.speedbook.driver"
     compileSdk = flutter.compileSdkVersion
 
     ndkVersion = "29.0.13113456"
@@ -32,8 +32,8 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.speedbook.taxidriver"
-        minSdk = 23
+        applicationId = "com.speedbook.driver"
+        minSdk = flutter.minSdkVersion
         targetSdk = 35
         versionCode = flutter.versionCode
         versionName = flutter.versionName

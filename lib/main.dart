@@ -6,6 +6,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
+
 
 import 'api_service.dart';
 import 'home_page.dart';
@@ -23,7 +26,24 @@ Future<void> main() async {
 
   await Firebase.initializeApp();
 
-  // Глобальная реакция на невалидный токен — сразу уводим на /login
+  final opts = Firebase.app().options;
+  debugPrint('FB project: ${opts.projectId} appId: ${opts.appId} apiKey: ${opts.apiKey}');
+
+  if (kDebugMode) {
+    await FirebaseAppCheck.instance.activate(
+      androidProvider: AndroidProvider.debug,
+      appleProvider: AppleProvider.debug,
+    );
+
+    final token = await FirebaseAppCheck.instance.getToken();
+    debugPrint('AppCheck debug token: $token');
+  } else {
+    await FirebaseAppCheck.instance.activate(
+      androidProvider: AndroidProvider.playIntegrity, // Android
+      appleProvider: AppleProvider.deviceCheck,       // iOS (или AppleProvider.appAttest)
+    );
+  }
+
   ApiService.setOnAuthFailed(() {
     navigatorKey.currentState?.pushNamedAndRemoveUntil(
       '/login',
