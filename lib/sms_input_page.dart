@@ -204,9 +204,10 @@ class _SmsInputPageState extends State<SmsInputPage>
   Future<bool> _handleAuth(PhoneAuthCredential credential) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      String user_country = prefs.getString('user_country') ?? '';
-      debugPrint('[SMSInput] user_country: $user_country');
+      final userCountry = prefs.getString('user_country') ?? '';
+      debugPrint('[SMSInput] user_country: $userCountry');
 
+      // 1) Firebase sign-in
       final userCredential = await _auth.signInWithCredential(credential);
       final user = userCredential.user;
       if (user == null) {
@@ -218,12 +219,15 @@ class _SmsInputPageState extends State<SmsInputPage>
         return false;
       }
 
+      // 2) Firebase ID token
       final idToken = await user.getIdToken(true);
-      await MessagingService.I.init();
 
+      // 3) Push init / device info
+      await MessagingService.I.init();
       final deviceInfo = await _getDeviceInfo();
       final fcmToken = await _getFcmTokenWithPermissions();
 
+      // 4) API url
       if (_apiUrl == null) {
         await _loadApiUrl();
         if (_apiUrl == null) {
@@ -236,12 +240,12 @@ class _SmsInputPageState extends State<SmsInputPage>
         }
       }
 
+      // 5) Backend auth
       final currentLocale =
           WidgetsBinding.instance.platformDispatcher.locale.languageCode;
       final info = await PackageInfo.fromPlatform();
       final platform =
       Platform.isAndroid ? 'android' : (Platform.isIOS ? 'ios' : 'unknown');
-
 
       final urlStr = '${_apiUrl!}/api/auth_driver';
       final response = await http
@@ -261,11 +265,12 @@ class _SmsInputPageState extends State<SmsInputPage>
           'app_version': info.version,
           'fcm_token': fcmToken,
           'is_driver': true,
-          'region': user_country,
+          'region': userCountry,
         }),
-      ).timeout(const Duration(seconds: 15));
+      )
+          .timeout(const Duration(seconds: 15));
 
-      debugPrint('[SMSInput] response code: $response.statusCode');
+      debugPrint('[SMSInput] response code: ${response.statusCode}');
 
       if (response.statusCode != 200) {
         if (mounted) {
@@ -277,9 +282,10 @@ class _SmsInputPageState extends State<SmsInputPage>
       }
 
       final Map<String, dynamic> json = jsonDecode(response.body);
-      debugPrint('[SMSInput] response body: $response.json');
+      debugPrint('[SMSInput] response body: ${response.body}');
 
       if (json['status'] != 'OK') {
+        // Бэкенд не подтвердил авторизацию
         await FirebaseAuth.instance.signOut();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -289,16 +295,36 @@ class _SmsInputPageState extends State<SmsInputPage>
         return false;
       }
 
-      final token = json['data']?['token'];
+      // 6) Извлекаем токены и подтверждаем успех ТОЛЬКО если они есть
+      final token  = json['data']?['token'];
       final secret = json['data']?['secret'];
-      debugPrint('[SMSInput] token: $token, secret: $secret');
+      debugPrint('[SMSInput] token: $token, secret: ${secret is String ? "***" : secret}');
 
-      if (token is String && secret is String) {
+      if (token is String && token.isNotEmpty && secret is String && secret.isNotEmpty) {
         await prefs.setString('secret', secret);
         await prefs.setString('token', token);
+        return true;
+      } else {
+        // Ответ OK без токена — считаем ошибкой
+        await FirebaseAuth.instance.signOut();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(t(context, 'common.unknown_error'))),
+          );
+        }
+        return false;
       }
-
-      return true;
+    } on FirebaseAuthException catch (e) {
+      // Неверный код, истёкший verificationId и т.п.
+      if (mounted) {
+        String code = e.code;
+        debugPrint('[SMSInput] verification error: $e, code: $code');
+        final msg = (e.code == 'invalid-verification-code')
+            ? t(context, 'phone.verification_failed')
+            : e.message ?? e.code;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      }
+      return false;
     } on TimeoutException {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -337,23 +363,42 @@ class _SmsInputPageState extends State<SmsInputPage>
 
     setState(() => _submitting = true);
 
-    final credential = PhoneAuthProvider.credential(
-      verificationId: _verificationId,
-      smsCode: _code,
-    );
+    try {
+      final credential = PhoneAuthProvider.credential(
+        verificationId: _verificationId,
+        smsCode: _code,
+      );
 
-    final ok = await _handleAuth(credential);
+      final ok = await _handleAuth(credential);
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    if (ok) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(t(context, 'common.success'))));
-      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
-    } else {
+      if (ok) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(t(context, 'common.success'))));
+        Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+      } else {
+        setState(() => _submitting = false);
+      }
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      // Неверный код — не уходим со страницы
       setState(() => _submitting = false);
+      final msg = (e.code == 'invalid-verification-code')
+          ? t(context, 'sms.enter_digits')
+          : e.message ?? e.code;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg)),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${t(context, 'common.error')}: $e')),
+      );
     }
   }
+
 
   void _goBackToPhone() {
     if (Navigator.of(context).canPop()) {

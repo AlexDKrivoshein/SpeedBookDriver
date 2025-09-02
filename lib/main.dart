@@ -9,7 +9,6 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 
-
 import 'api_service.dart';
 import 'home_page.dart';
 import 'phone_input_page.dart';
@@ -34,21 +33,18 @@ Future<void> main() async {
       androidProvider: AndroidProvider.debug,
       appleProvider: AppleProvider.debug,
     );
-
     final token = await FirebaseAppCheck.instance.getToken();
     debugPrint('AppCheck debug token: $token');
   } else {
     await FirebaseAppCheck.instance.activate(
-      androidProvider: AndroidProvider.playIntegrity, // Android
-      appleProvider: AppleProvider.deviceCheck,       // iOS (или AppleProvider.appAttest)
+      androidProvider: AndroidProvider.playIntegrity,
+      appleProvider: AppleProvider.deviceCheck,
     );
   }
 
+  // Глобальная реакция на невалидную backend-сессию
   ApiService.setOnAuthFailed(() {
-    navigatorKey.currentState?.pushNamedAndRemoveUntil(
-      '/login',
-          (route) => false,
-    );
+    navigatorKey.currentState?.pushNamedAndRemoveUntil('/login', (route) => false);
   });
 
   runApp(const MyApp());
@@ -59,7 +55,7 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // ⮟ Провайдер переводов + реактивная обёртка всего приложения
+    // Провайдер переводов + реактивная обёртка всего приложения
     return ChangeNotifierProvider<Translations>(
       create: (_) => Translations()..init(),
       child: Consumer<Translations>(
@@ -75,8 +71,8 @@ class MyApp extends StatelessWidget {
                 colorSchemeSeed: Colors.blue,
               ),
 
-              // вот эти строки:
-              locale: Locale(i18n.lang), // язык из нашего провайдера Translations
+              // Локализация приложения
+              locale: Locale(i18n.lang),
               supportedLocales: const [
                 Locale('en'),
                 Locale('ru'),
@@ -112,6 +108,7 @@ class _RootState extends State<_Root> {
   bool? _needOnboarding;   // null = загрузка
   bool _checkingInit = true;
   bool _isLoggedIn = false;
+  bool _hasSession = false; // <-- добавлено: есть ли backend-сессия (token+secret)
 
   @override
   void initState() {
@@ -126,7 +123,7 @@ class _RootState extends State<_Root> {
     return hasToken && hasSecret;
   }
 
-  /// Ждём пока SmsInputPage сохранит token/secret (макс. ~3 секунды)
+  /// Ждём, пока sms_input_page сохранит token/secret (макс. ~3 секунды)
   Future<bool> _waitForBackendSession({Duration timeout = const Duration(seconds: 3)}) async {
     final start = DateTime.now();
     while (DateTime.now().difference(start) < timeout) {
@@ -169,19 +166,23 @@ class _RootState extends State<_Root> {
       _isLoggedIn = user != null;
 
       if (_isLoggedIn) {
-        // 1) Ждём пока SmsInputPage сохранит token/secret
+        // 1) ждём, пока sms_input_page запишет token/secret
         final sessionReady = await _waitForBackendSession();
         if (!sessionReady) {
-          // Не дождались — считаем, что сессии нет, покажем экран логина
-          if (mounted) setState(() => _checkingInit = false);
-          return;
+          if (mounted) {
+            setState(() {
+              _hasSession = false;
+              _checkingInit = false;
+            });
+          }
+          return; // не идём на Home
         }
 
         try {
-          // 2) Теперь безопасно: токены точно есть
+          // 2) теперь безопасно: токены точно есть
           final profile = await ApiService.checkTokenOnline(validateOnline: true);
 
-          // 3) Язык: сохранённый/с профиля → загрузка переводов
+          // 3) язык: сохранённый/с профиля → загрузка переводов
           final prefs = await SharedPreferences.getInstance();
           final savedLang = (prefs.getString('user_lang') ?? '').toLowerCase();
           final userLang = savedLang.isNotEmpty
@@ -192,9 +193,13 @@ class _RootState extends State<_Root> {
           await ApiService.loadTranslations(lang: userLang);
           if (mounted) {
             await context.read<Translations>().setLang(userLang);
+            setState(() {
+              _hasSession = true;      // есть backend-сессия
+              _checkingInit = false;
+            });
           }
         } catch (_) {
-          // Если проверка токена всё же провалилась — редиректом займётся onAuthFailed
+          // onAuthFailed сам отправит на /login
           return;
         }
       } else {
@@ -208,10 +213,12 @@ class _RootState extends State<_Root> {
         await ApiService.loadTranslations(lang: guestLang);
         if (mounted) {
           await context.read<Translations>().setLang(guestLang);
+          setState(() {
+            _hasSession = false;
+            _checkingInit = false;
+          });
         }
       }
-
-      if (mounted) setState(() => _checkingInit = false);
     });
   }
 
@@ -226,9 +233,12 @@ class _RootState extends State<_Root> {
     if (_checkingInit) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    if (!_isLoggedIn) {
+
+    // На HomePage только при наличии backend-сессии
+    if (!_isLoggedIn || !_hasSession) {
       return const PhoneInputPage();
     }
+
     return ChangeNotifierProvider<LocationService>(
       create: (ctx) => LocationService(
         onDeniedForever: () => showLocationPermissionDialog(ctx),

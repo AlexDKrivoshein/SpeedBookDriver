@@ -22,9 +22,6 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
   static const _assetLogoBanner = 'assets/brand/speedbooknew.png';
   static const _assetPattern    = 'assets/brand/background.png';
 
-  static const double _kFieldHeight = 56;
-  static const double _kRadius = 18;
-
   final _phoneCtrl = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
@@ -129,18 +126,32 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
   @override
   Widget build(BuildContext context) {
     final size  = MediaQuery.of(context).size;
-    final theme = Theme.of(context);
+    final w = size.width;
+    final h = size.height;
     final insets = MediaQuery.of(context).viewInsets;
     final keyboard = insets.bottom > 0;
 
+    // ===== Адаптивные величины =====
+    final headerHeight = (h * 0.44).clamp(280.0, 420.0);     // высота шапки
+    final overlap      = (headerHeight * 0.26).clamp(72.0, 128.0); // насколько карточка «заходит» на шапку
+    final cardTop      = (headerHeight - overlap).clamp(120.0, headerHeight);
+
+    final cardRadius   = (w * 0.06).clamp(18.0, 26.0);
+    final fieldHeight  = (h * 0.06).clamp(52.0, 60.0);
+    final buttonHeight = (h * 0.065).clamp(52.0, 60.0);
+
+    final bannerTop     = (headerHeight * 0.11).clamp(36.0, 64.0);
+    final bannerHeight  = (w * 0.26).clamp(96.0, 120.0);
+
+    final sloganSize    = (w * 0.058).clamp(22.0, 26.0); // 22–26 sp
+
     const bottomPanelHeight = 120.0;
-    final headerHeight = size.height * 0.44;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7FBFB),
       body: Stack(
         children: [
-          // Верхний жёлтый блок с паттерном
+          // Верхний блок с паттерном (без жёлтой заливки)
           Positioned(
             top: 0, left: 0, right: 0,
             child: ClipRRect(
@@ -153,24 +164,22 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    // фон — сразу картинка
                     Image.asset(
                       _assetPattern,
                       repeat: ImageRepeat.repeat,
-                      fit: BoxFit.none,          // важно: не растягиваем плитку
+                      fit: BoxFit.none,          // плитка не масштабируется
                       alignment: Alignment.topLeft,
+                      filterQuality: FilterQuality.low,
                     ),
-
-                    // логотип
                     Align(
                       alignment: Alignment.topCenter,
                       child: SafeArea(
                         bottom: false,
                         child: Padding(
-                          padding: const EdgeInsets.only(top: 48), // было 36
+                          padding: EdgeInsets.only(top: bannerTop),
                           child: Image.asset(
                             _assetLogoBanner,
-                            height: 110, // было 96
+                            height: bannerHeight,
                             fit: BoxFit.contain,
                           ),
                         ),
@@ -181,13 +190,14 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
               ),
             ),
           ),
-          // Контент (белая карточка со скруглением)
+
+          // Контент (белая карточка со скруглением и тенью)
           Positioned.fill(
             child: SafeArea(
               child: SingleChildScrollView(
                 padding: EdgeInsets.fromLTRB(
                   16,
-                  headerHeight - 40, // карточка немного «заходит» на жёлтый блок
+                  cardTop,
                   16,
                   (keyboard ? 16 : bottomPanelHeight) + insets.bottom,
                 ),
@@ -197,7 +207,7 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
                     child: Container(
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(24),
+                        borderRadius: BorderRadius.circular(cardRadius),
                         boxShadow: const [
                           BoxShadow(
                             color: Color(0x14000000),
@@ -206,28 +216,28 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
                           ),
                         ],
                       ),
-                      padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+                      padding: const EdgeInsets.fromLTRB(20, 32, 20, 24), // ↑ чуть больше воздуха сверху
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          // Слоган: обычный текст + жёлтое "SpeedBook!"
+                          // Слоган: префикс + перенос строки + жёлтое "SpeedBook!"
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 6),
                             child: RichText(
                               textAlign: TextAlign.center,
                               text: TextSpan(
-                                style: const TextStyle(
-                                  fontSize: 24,          // увеличили
+                                style: TextStyle(
+                                  fontSize: sloganSize,
                                   fontWeight: FontWeight.w700,
                                   height: 1.4,
                                   color: Colors.black87,
                                 ),
                                 children: [
-                                  TextSpan(text: t(context, 'phone.hero.prefix') + '\n',),
+                                  TextSpan(text: t(context, 'phone.hero.prefix') + '\n'),
                                   TextSpan(
                                     text: t(context, 'phone.hero.brand'),
-                                    style: const TextStyle(
-                                      fontSize: 24,      // совпадает с основным
+                                    style: TextStyle(
+                                      fontSize: sloganSize,
                                       fontWeight: FontWeight.w900,
                                       color: Brand.yellowDark,
                                     ),
@@ -249,7 +259,7 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
                                     _FlagPill(
                                       country: _country,
                                       onTap: _pickCountry,
-                                      height: _kFieldHeight,
+                                      height: fieldHeight,
                                       radius: 16,
                                     ),
                                     const SizedBox(width: 10),
@@ -258,7 +268,7 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
                                         controller: _phoneCtrl,
                                         country: _country,
                                         onPickCountry: _pickCountry,
-                                        height: _kFieldHeight,
+                                        height: fieldHeight,
                                         radius: 16,
                                       ),
                                     ),
@@ -269,7 +279,7 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
                                 // Кнопка
                                 SizedBox(
                                   width: double.infinity,
-                                  height: 56,
+                                  height: buttonHeight,
                                   child: ElevatedButton(
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: Brand.yellow,
