@@ -4,7 +4,6 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
 
-import 'api_service.dart';
 import 'brand.dart';
 import 'brand_header.dart';
 import 'translations.dart';
@@ -115,13 +114,6 @@ class _OnboardingPageState extends State<OnboardingPage> {
     try {
       await _markPushChecked();
 
-      // запрос пуш-разрешения (best effort)
-      try {
-        await FirebaseMessaging.instance
-            .requestPermission(alert: true, badge: true, sound: true)
-            .timeout(const Duration(seconds: 6));
-      } catch (_) {}
-
       // FCM токен -> бэк (best effort)
       String? token;
       try {
@@ -135,8 +127,6 @@ class _OnboardingPageState extends State<OnboardingPage> {
         await context.read<Translations>().setLang(_lang); // страховка
         widget.onDone();
       }
-      if (!mounted) return;
-      widget.onDone();
     } on TimeoutException {
       if (!mounted) return;
       setState(() => _error = 'Timeout. Please try again.');
@@ -147,6 +137,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
       if (mounted) setState(() => _busy = false);
     }
   }
+
 
   @override
   Widget build(BuildContext context) {

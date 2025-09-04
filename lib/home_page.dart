@@ -1,3 +1,4 @@
+// lib/home_page.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
 
@@ -74,7 +75,7 @@ class _HomePageState extends State<HomePage> {
     } on TimeoutException {
       if (!mounted) return;
       setState(() {
-        _error = t(context, 'common.error.timeout');
+        _error = t(context, 'common.timeout'); // <-- ключ исправлен
         _loading = false;
       });
     } catch (e) {
@@ -96,8 +97,7 @@ class _HomePageState extends State<HomePage> {
         data: theme,
         child: Scaffold(
           appBar: BrandHeader(
-//            title: t(context, 'home.title'),
-            title: '',
+            title: t(context, 'home.title'),
             logoAsset: 'assets/brand/speedbook.png',
           ),
           body: const Center(child: CircularProgressIndicator()),
@@ -111,8 +111,7 @@ class _HomePageState extends State<HomePage> {
         data: theme,
         child: Scaffold(
           appBar: BrandHeader(
-//            title: t(context, 'home.title'),
-            title: '',
+            title: t(context, 'home.title'),
             logoAsset: 'assets/brand/speedbook.png',
           ),
           body: Center(
@@ -151,8 +150,7 @@ class _HomePageState extends State<HomePage> {
       data: theme,
       child: Scaffold(
         appBar: BrandHeader(
-//          title: t(context, 'home.title'),
-          title: '',
+          title: t(context, 'home.title'),
           logoAsset: 'assets/brand/speedbook.png',
         ),
         body: RefreshIndicator(
@@ -269,7 +267,7 @@ class _HomePageState extends State<HomePage> {
                     const SizedBox(height: 8),
                     _VerificationBadge(status: status),
 
-                    // Пояснение причины при отказе
+                    // Причина отказа
                     if (status == DriverVerificationStatus.rejected &&
                         (_details?.rejectionReason?.isNotEmpty ?? false)) ...[
                       const SizedBox(height: 8),
@@ -305,7 +303,7 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
 
-              // тут можно добавить другие секции
+              // … другие секции
             ],
           ),
         ),
@@ -397,7 +395,6 @@ class _VerificationBadge extends StatelessWidget {
   }
 }
 
-
 class _AccountSquareCard extends StatelessWidget {
   final DriverAccount account;
   final bool highlighted;
@@ -449,7 +446,7 @@ class _AccountSquareCard extends StatelessWidget {
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    '${account.currency} · id: ${account.id}',
+                    '${account.currency} · ${t(context, "home.account.id")}: ${account.id}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodySmall
