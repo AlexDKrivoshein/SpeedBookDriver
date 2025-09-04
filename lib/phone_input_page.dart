@@ -22,7 +22,8 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
   static const _assetLogoBanner = 'assets/brand/speedbooknew.png';
   static const _assetPattern    = 'assets/brand/background.png';
 
-  final _phoneCtrl = TextEditingController();
+  final _phoneCtrl  = TextEditingController();
+  final _phoneFocus = FocusNode();                 // <-- фокус для поля номера
   final _formKey = GlobalKey<FormState>();
 
   bool _submitting = false;
@@ -37,6 +38,7 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
   @override
   void dispose() {
     _phoneCtrl.dispose();
+    _phoneFocus.dispose();                         // <-- освобождаем фокус
     super.dispose();
   }
 
@@ -47,7 +49,14 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
       isScrollControlled: true,
       builder: (_) => const _CountryPickerSheet(),
     );
-    if (picked != null && mounted) setState(() => _country = picked);
+    if (picked != null && mounted) {
+      setState(() => _country = picked);
+      // Переводим фокус на поле телефона сразу после закрытия шита
+      Future.microtask(() {
+        if (!mounted) return;
+        FocusScope.of(context).requestFocus(_phoneFocus);
+      });
+    }
   }
 
   Future<void> _submit() async {
@@ -216,11 +225,11 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
                           ),
                         ],
                       ),
-                      padding: const EdgeInsets.fromLTRB(20, 32, 20, 24), // ↑ чуть больше воздуха сверху
+                      padding: const EdgeInsets.fromLTRB(20, 32, 20, 24),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          // Слоган: префикс + перенос строки + жёлтое "SpeedBook!"
+                          // Слоган
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 6),
                             child: RichText(
@@ -239,7 +248,7 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
                                     style: TextStyle(
                                       fontSize: sloganSize,
                                       fontWeight: FontWeight.w900,
-                                      color: Brand.yellowDark,
+                                      color: Brand.yellow,
                                     ),
                                   ),
                                 ],
@@ -270,6 +279,7 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
                                         onPickCountry: _pickCountry,
                                         height: fieldHeight,
                                         radius: 16,
+                                        focusNode: _phoneFocus, // <-- фокус прокинут сюда
                                       ),
                                     ),
                                   ],
@@ -392,7 +402,7 @@ class _FlagPill extends StatelessWidget {
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(radius),
-      elevation: 2,
+      elevation: 0, // без тени
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(radius),
@@ -431,6 +441,7 @@ class _PhoneFieldWithCountry extends StatelessWidget {
     required this.onPickCountry,
     required this.height,
     required this.radius,
+    this.focusNode,                              // <-- добавлено
   });
 
   final TextEditingController controller;
@@ -438,6 +449,7 @@ class _PhoneFieldWithCountry extends StatelessWidget {
   final VoidCallback onPickCountry;
   final double height;
   final double radius;
+  final FocusNode? focusNode;                    // <-- добавлено
 
   @override
   Widget build(BuildContext context) {
@@ -445,6 +457,7 @@ class _PhoneFieldWithCountry extends StatelessWidget {
       height: height,
       child: TextFormField(
         controller: controller,
+        focusNode: focusNode,                    // <-- используем
         keyboardType: TextInputType.phone,
         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
         autovalidateMode: AutovalidateMode.onUserInteraction,
@@ -464,7 +477,7 @@ class _PhoneFieldWithCountry extends StatelessWidget {
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(radius),
-            borderSide: const BorderSide(color: Brand.yellowDark, width: 2),
+            borderSide: const BorderSide(color: Brand.yellow, width: 2),
           ),
           prefixIconConstraints: const BoxConstraints(minWidth: 86, minHeight: 0),
           prefixIcon: Padding(

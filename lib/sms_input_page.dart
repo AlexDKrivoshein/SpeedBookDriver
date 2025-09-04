@@ -545,7 +545,7 @@ class _SmsInputPageState extends State<SmsInputPage>
                       child: ElevatedButton(
                         onPressed: _submitting ? null : verifySmsCode,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFDCCFB5),
+                          backgroundColor: Brand.yellow,
                           foregroundColor: Colors.black87,
                           shadowColor: Colors.transparent,
                           textStyle: const TextStyle(

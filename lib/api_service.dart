@@ -371,6 +371,8 @@ class ApiService {
     }
   }
 
+  static bool _logMissingTranslations = true;
+
   static String getTranslation(String widgetName, String key) {
     // 1) локальные prelogin
     final vLocal = _translationsLocal[key];
@@ -379,8 +381,7 @@ class ApiService {
     // 2) сетевые переводы
     final vNet = _translations[key];
     if (vNet != null) return vNet;
-
-    // 3) авто-регистрация ключа на бэке — пробуем мягко (может выбросить AuthException до логина)
+/*
     _getAppSystemName().then((module) async {
       try {
         await callPlain('add_translation', {
@@ -390,9 +391,18 @@ class ApiService {
         }, validateOnline: false);
       } catch (_) {}
     }).catchError((_) {});
-
+*/
+    if (_logMissingTranslations) {
+      // один раз на ключ (не заспамить логи)
+      _missingKeys ??= <String>{};
+      if (_missingKeys!.add(key)) {
+        debugPrint('[i18n] missing: "$key" (widget: $widgetName)');
+      }
+    }
     return key;
   }
+
+  static Set<String>? _missingKeys;
 
   static String getTranslationForWidget(BuildContext context, String key) {
     final widgetName = context.widget.runtimeType.toString();

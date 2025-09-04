@@ -26,7 +26,8 @@ Future<void> main() async {
   await Firebase.initializeApp();
 
   final opts = Firebase.app().options;
-  debugPrint('FB project: ${opts.projectId} appId: ${opts.appId} apiKey: ${opts.apiKey}');
+  debugPrint(
+      'FB project: ${opts.projectId} appId: ${opts.appId} apiKey: ${opts.apiKey}');
 
   if (kDebugMode) {
     await FirebaseAppCheck.instance.activate(
@@ -44,7 +45,8 @@ Future<void> main() async {
 
   // Глобальная реакция на невалидную backend-сессию
   ApiService.setOnAuthFailed(() {
-    navigatorKey.currentState?.pushNamedAndRemoveUntil('/login', (route) => false);
+    navigatorKey.currentState
+        ?.pushNamedAndRemoveUntil('/login', (route) => false);
   });
 
   runApp(const MyApp());
@@ -55,13 +57,12 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Провайдер переводов + реактивная обёртка всего приложения
     return ChangeNotifierProvider<Translations>(
       create: (_) => Translations()..init(),
       child: Consumer<Translations>(
         builder: (context, i18n, _) {
           return TranslationsScope(
-            tick: i18n.tick, // любое изменение языка триггерит перестройку
+            tick: i18n.tick,
             child: MaterialApp(
               navigatorKey: navigatorKey,
               title: 'SpeedBook taxi driver',
@@ -70,8 +71,6 @@ class MyApp extends StatelessWidget {
                 useMaterial3: true,
                 colorSchemeSeed: Colors.blue,
               ),
-
-              // Локализация приложения
               locale: Locale(i18n.lang),
               supportedLocales: const [
                 Locale('en'),
@@ -83,7 +82,6 @@ class MyApp extends StatelessWidget {
                 GlobalWidgetsLocalizations.delegate,
                 GlobalCupertinoLocalizations.delegate,
               ],
-
               routes: {
                 '/': (_) => const _Root(),
                 '/login': (_) => const PhoneInputPage(),
@@ -105,10 +103,10 @@ class _Root extends StatefulWidget {
 }
 
 class _RootState extends State<_Root> {
-  bool? _needOnboarding;   // null = загрузка
+  bool? _needOnboarding; // null = загрузка
   bool _checkingInit = true;
   bool _isLoggedIn = false;
-  bool _hasSession = false; // <-- добавлено: есть ли backend-сессия (token+secret)
+  bool _hasSession = false;
 
   @override
   void initState() {
@@ -118,13 +116,13 @@ class _RootState extends State<_Root> {
 
   Future<bool> _hasBackendSession() async {
     final prefs = await SharedPreferences.getInstance();
-    final hasToken  = (prefs.getString('token')  ?? '').isNotEmpty;
+    final hasToken = (prefs.getString('token') ?? '').isNotEmpty;
     final hasSecret = (prefs.getString('secret') ?? '').isNotEmpty;
     return hasToken && hasSecret;
   }
 
-  /// Ждём, пока sms_input_page сохранит token/secret (макс. ~3 секунды)
-  Future<bool> _waitForBackendSession({Duration timeout = const Duration(seconds: 3)}) async {
+  Future<bool> _waitForBackendSession(
+      {Duration timeout = const Duration(seconds: 3)}) async {
     final start = DateTime.now();
     while (DateTime.now().difference(start) < timeout) {
       if (await _hasBackendSession()) return true;
@@ -134,16 +132,29 @@ class _RootState extends State<_Root> {
   }
 
   Future<void> _decideOnboarding() async {
+    // Debug → всегда онбординг
+    if (kDebugMode) {
+      setState(() {
+        _needOnboarding = true;
+        _checkingInit = false;
+      });
+      return;
+    }
+
+    // Release → авто язык и страна
     final prefs = await SharedPreferences.getInstance();
-    final done = prefs.getBool('onboarding_done') == true;
-    setState(() => _needOnboarding = !done);
+    final systemLocale = WidgetsBinding.instance.platformDispatcher.locale;
+    final sysLang = (systemLocale.languageCode ?? 'en').toLowerCase();
+    const allowed = {'en', 'ru', 'km'};
+    final lang = allowed.contains(sysLang) ? sysLang : 'en';
+
+    await prefs.setString('user_lang', lang);
+    await prefs.setString('user_country', 'KH');
+
+    setState(() => _needOnboarding = false);
 
     if (!mounted) return;
-    if (_needOnboarding == true) {
-      setState(() => _checkingInit = false); // покажем онбординг
-    } else {
-      _attachAuthListener(); // обычный флоу
-    }
+    _attachAuthListener();
   }
 
   Future<void> _markOnboardingDone() async {
@@ -152,7 +163,9 @@ class _RootState extends State<_Root> {
   }
 
   void _onOnboardingDone() async {
-    await _markOnboardingDone();
+    if (!kDebugMode) {
+      await _markOnboardingDone();
+    }
     if (!mounted) return;
     setState(() {
       _needOnboarding = false;
@@ -166,7 +179,6 @@ class _RootState extends State<_Root> {
       _isLoggedIn = user != null;
 
       if (_isLoggedIn) {
-        // 1) ждём, пока sms_input_page запишет token/secret
         final sessionReady = await _waitForBackendSession();
         if (!sessionReady) {
           if (mounted) {
@@ -175,35 +187,32 @@ class _RootState extends State<_Root> {
               _checkingInit = false;
             });
           }
-          return; // не идём на Home
+          return;
         }
 
         try {
-          // 2) теперь безопасно: токены точно есть
-          final profile = await ApiService.checkTokenOnline(validateOnline: true);
+          final profile =
+          await ApiService.checkTokenOnline(validateOnline: true);
 
-          // 3) язык: сохранённый/с профиля → загрузка переводов
           final prefs = await SharedPreferences.getInstance();
           final savedLang = (prefs.getString('user_lang') ?? '').toLowerCase();
           final userLang = savedLang.isNotEmpty
               ? savedLang
-              : (profile['lang'] as String?)?.toLowerCase()
-              ?? ui.window.locale.languageCode.toLowerCase();
+              : (profile['lang'] as String?)?.toLowerCase() ??
+              ui.window.locale.languageCode.toLowerCase();
 
           await ApiService.loadTranslations(lang: userLang);
           if (mounted) {
             await context.read<Translations>().setLang(userLang);
             setState(() {
-              _hasSession = true;      // есть backend-сессия
+              _hasSession = true;
               _checkingInit = false;
             });
           }
         } catch (_) {
-          // onAuthFailed сам отправит на /login
           return;
         }
       } else {
-        // Гость: берём выбранный язык (с онбординга) или системный
         final prefs = await SharedPreferences.getInstance();
         final savedLang = (prefs.getString('user_lang') ?? '').toLowerCase();
         final guestLang = savedLang.isNotEmpty
@@ -225,16 +234,17 @@ class _RootState extends State<_Root> {
   @override
   Widget build(BuildContext context) {
     if (_needOnboarding == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(
+          body: Center(child: CircularProgressIndicator()));
     }
     if (_needOnboarding == true) {
       return OnboardingPage(onDone: _onOnboardingDone);
     }
     if (_checkingInit) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(
+          body: Center(child: CircularProgressIndicator()));
     }
 
-    // На HomePage только при наличии backend-сессии
     if (!_isLoggedIn || !_hasSession) {
       return const PhoneInputPage();
     }
