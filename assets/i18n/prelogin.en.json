@@ -24,6 +24,13 @@
   "sms.signin_failed": "Sign-in failed",
   "sms.code_expired": "Code expired. Please resend.",
 
+  "sms.code_invalid": "The code you entered is invalid.",
+  "sms.session_expired": "The verification session has expired. Please request a new code.",
+  "sms.too_many_requests": "Too many attempts. Please try again later.",
+  "sms.quota_exceeded": "The verification quota has been exceeded. Please try again later.",
+  "sms.app_check_failed": "App verification failed. Please try again.",
+  "common.network_error": "Network error. Please check your connection.",
+
   "common.success": "Success!",
   "common.timeout": "Server timeout",
   "common.error": "Error",

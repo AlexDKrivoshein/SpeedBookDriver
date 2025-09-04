@@ -6,12 +6,9 @@ import org.gradle.api.GradleException
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    // Flutter plugin должен идти после Android/Kotlin
     id("dev.flutter.flutter-gradle-plugin")
     id("com.google.gms.google-services")
 }
-
-// читаем key.properties, если есть
 val keystoreProperties = Properties().apply {
     val f = rootProject.file("key.properties")
     if (f.exists()) load(FileInputStream(f))
@@ -38,7 +35,6 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
 
-        // требуем обязательные проектные свойства
         val geoKey = project.findProperty("GOOGLE_GEO_API_KEY") as String?
             ?: throw GradleException("Missing GOOGLE_GEO_API_KEY")
         val mapsKey = project.findProperty("GOOGLE_MAPS_API_KEY") as String?
@@ -73,17 +69,14 @@ android {
             )
         }
         getByName("debug") {
-            // debug подписывается дефолтным debug.keystore
             isMinifyEnabled = false
         }
     }
 }
 
 dependencies {
-    // Firebase BOM + нужные либы
     implementation(platform("com.google.firebase:firebase-bom:33.11.0"))
     implementation("com.google.firebase:firebase-analytics")
-    // добавляй другие: auth, messaging и т.д. при необходимости
 }
 
 flutter {

@@ -201,6 +201,35 @@ class _SmsInputPageState extends State<SmsInputPage>
     return {'device': device, 'osVersion': osVersion};
   }
 
+  String _msgForFirebaseError(FirebaseAuthException e, BuildContext context) {
+    // Чтобы в логах всегда было видно, что пришло реально
+    debugPrint('[SMSInput] FirebaseAuthException code=${e.code} message=${e.message}');
+
+    switch (e.code) {
+      case 'invalid-verification-code':
+      // Неверный одноразовый код (но не путать с длиной — длину проверяем до вызова)
+        return t(context, 'sms.code_invalid');      // напр. "Неверный код"
+      case 'invalid-verification-id':
+      case 'missing-verification-id':
+        return t(context, 'sms.code_expired');      // "Срок действия кода истёк. Отправьте новый."
+      case 'session-expired':
+        return t(context, 'sms.session_expired');   // "Сессия подтверждения истекла. Отправьте новый код."
+      case 'too-many-requests':
+        return t(context, 'sms.too_many_requests'); // "Слишком много попыток. Попробуйте позже."
+      case 'network-request-failed':
+        return t(context, 'common.network_error');  // "Проблемы с сетью"
+      case 'quota-exceeded':
+        return t(context, 'sms.quota_exceeded');    // лимиты на проекте
+      case 'app-not-authorized':
+      case 'invalid-app-credential':
+      case 'captcha-check-failed':
+        return t(context, 'sms.app_check_failed');  // проблемы с App Check/интегр.
+      default:
+      // По умолчанию — сообщение Firebase, если есть; иначе общий
+        return e.message ?? t(context, 'common.error');
+    }
+  }
+
   Future<bool> _handleAuth(PhoneAuthCredential credential) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -315,13 +344,8 @@ class _SmsInputPageState extends State<SmsInputPage>
         return false;
       }
     } on FirebaseAuthException catch (e) {
-      // Неверный код, истёкший verificationId и т.п.
       if (mounted) {
-        String code = e.code;
-        debugPrint('[SMSInput] verification error: $e, code: $code');
-        final msg = (e.code == 'invalid-verification-code')
-            ? t(context, 'phone.verification_failed')
-            : e.message ?? e.code;
+        final msg = _msgForFirebaseError(e, context);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
       }
       return false;
@@ -382,14 +406,9 @@ class _SmsInputPageState extends State<SmsInputPage>
       }
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
-      // Неверный код — не уходим со страницы
       setState(() => _submitting = false);
-      final msg = (e.code == 'invalid-verification-code')
-          ? t(context, 'sms.enter_digits')
-          : e.message ?? e.code;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg)),
-      );
+      final msg = _msgForFirebaseError(e, context);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     } catch (e) {
       if (!mounted) return;
       setState(() => _submitting = false);
@@ -398,7 +417,6 @@ class _SmsInputPageState extends State<SmsInputPage>
       );
     }
   }
-
 
   void _goBackToPhone() {
     if (Navigator.of(context).canPop()) {

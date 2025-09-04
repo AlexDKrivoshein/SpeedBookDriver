@@ -23,6 +23,13 @@
   "sms.signin_failed": "Ошибка входа",
   "sms.code_expired": "Срок действия кода истёк. Отправьте новый.",
 
+  "sms.code_invalid": "Неверный код",
+  "sms.session_expired": "Сессия подтверждения истекла. Отправьте новый код.",
+  "sms.too_many_requests": "Слишком много попыток. Попробуйте позже.",
+  "sms.quota_exceeded": "Превышена квота подтверждений. Повторите позже.",
+  "sms.app_check_failed": "Ошибка проверки приложения. Попробуйте снова.",
+
+  "common.network_error": "Проблемы с сетью",
   "common.success": "Готово!",
   "common.timeout": "Время ожидания истекло",
   "common.error": "Ошибка",
