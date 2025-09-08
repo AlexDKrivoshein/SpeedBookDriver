@@ -54,6 +54,10 @@
   "home.referral.error": "Не удалось подключить",
   "home.referral.current_prefix": "Пригласил",
   "home.referral.your_id": "Referral ID",
+
+  "home.transactions.title": "Последние транзакции",
+  "home.transactions.empty": "Пока нет транзакций",
+
   "common.copy": "Скопировать",
   "common.copied": "Скопировано",
 

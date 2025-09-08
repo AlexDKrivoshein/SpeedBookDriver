@@ -54,6 +54,10 @@
   "home.referral.error": "Failed to attach",
   "home.referral.current_prefix": "Referred by",
   "home.referral.your_id": "Referral ID",
+
+  "home.transactions.title": "Recent transactions",
+  "home.transactions.empty": "No transactions yet",
+
   "common.copy": "Copy",
   "common.copied": "Copied",
 
@@ -65,7 +69,6 @@
   "common.network_error": "Network error. Please check your connection.",
   "common.next": "Next",
   "common.back": "Back",
-
 
   "verification.title": "Verification",
   "verification.open": "Start verification",

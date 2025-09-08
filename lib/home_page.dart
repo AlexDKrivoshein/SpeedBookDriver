@@ -34,6 +34,7 @@ DriverVerificationStatus _statusFromClass(String? driverClass) {
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
+
   @override
   State<HomePage> createState() => _HomePageState();
 }
@@ -44,19 +45,24 @@ class _HomePageState extends State<HomePage> {
   String? _error;
   int _currentPage = 0;
 
-  //static const _assetPattern = 'assets/brand/background.png';
   static const _assetPattern = 'assets/brand/background_alpha.png';
+
   // --- Referral state ---
-  String? _referalName;          // непустая строка => уже подключён
-  bool _canAddReferal = false;   // можно ли сейчас привязать
+  String? _referalName; // к кому привязан
+  bool _canAddReferal = false; // можно ли сейчас привязать
   final TextEditingController _referalCtrl = TextEditingController();
-  bool _refBusy = false;         // крутилка на кнопке
+  bool _refBusy = false;
+
+  // --- Transactions state ---
+  List<DriverTransaction> _transactions = [];
+  bool _txLoading = true;
+  String? _txError;
 
   late final PageController _pageController;
   late final ImageProvider _bg;
   static const double _bgScale = 1.15;
   static const double _bgOpacityLight = 0.18;
-  static const double _bgOpacityDark  = 0.10;
+  static const double _bgOpacityDark = 0.10;
 
   @override
   void initState() {
@@ -84,29 +90,50 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       _loading = true;
       _error = null;
+      _txLoading = true;
+      _txError = null;
     });
 
     try {
       final d = await DriverApi.getDriverDetails()
           .timeout(const Duration(seconds: 15));
+
+      // грузим транзакции (тихо, даже если упадёт)
+      List<DriverTransaction> tx = [];
+      String? txErr;
+      try {
+        tx = await DriverApi.getDriverTransactions(limit: 20);
+      } catch (e) {
+        txErr = e.toString();
+      }
+
       if (!mounted) return;
       setState(() {
         _details = d;
         _referalName = d.referal;
         _canAddReferal = d.canAddReferal;
+
+        _transactions = tx;
+        _txError = txErr;
+        _txLoading = false;
+
         _loading = false;
+
+        //debugPrint('[HomePage] DriverDetails: $_details');
       });
     } on TimeoutException {
       if (!mounted) return;
       setState(() {
         _error = t(context, 'common.timeout');
         _loading = false;
+        _txLoading = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _error = e.toString();
         _loading = false;
+        _txLoading = false;
       });
     }
   }
@@ -126,7 +153,8 @@ class _HomePageState extends State<HomePage> {
       if (res['status'] != 'OK') {
         final code = res['message']?.toString() ?? 'unknown_error';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${t(context, 'home.referral.error')}: $code')),
+          SnackBar(
+              content: Text('${t(context, 'home.referral.error')}: $code')),
         );
         return;
       }
@@ -169,23 +197,23 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildSoftGradient() => Positioned.fill(
-    child: IgnorePointer(
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Colors.white.withOpacity(0.65),
-              Colors.white.withOpacity(0.0),
-              Colors.white.withOpacity(0.70),
-            ],
-            stops: const [0.0, 0.22, 1.0],
+        child: IgnorePointer(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.white.withOpacity(0.65),
+                  Colors.white.withOpacity(0.0),
+                  Colors.white.withOpacity(0.70),
+                ],
+                stops: const [0.0, 0.22, 1.0],
+              ),
+            ),
           ),
         ),
-      ),
-    ),
-  );
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -239,7 +267,6 @@ class _HomePageState extends State<HomePage> {
     final d = _details!;
     final accounts = d.accounts;
     final status = _statusFromClass(d.driverClass);
-    final bgOpacity = Theme.of(context).brightness == Brightness.dark ? 0.06 : 0.12;
 
     return Theme(
       data: theme,
@@ -250,7 +277,8 @@ class _HomePageState extends State<HomePage> {
             // 1) Фон
             _buildBackground(context),
             // _buildSoftGradient(),
-            // 3) Контент
+
+            // 2) Контент
             RefreshIndicator(
               onRefresh: () async => _load(),
               child: ListView(
@@ -273,12 +301,26 @@ class _HomePageState extends State<HomePage> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // Имя
-                              Text(
-                                d.name.isEmpty ? '—' : d.name,
-                                style: theme.textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                ),
+                              // Имя + зелёный бейдж при верификации
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      d.name.isEmpty ? '—' : d.name,
+                                      style:
+                                          theme.textTheme.titleMedium?.copyWith(
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  if (status ==
+                                      DriverVerificationStatus.verified) ...[
+                                    const SizedBox(width: 8),
+                                    const Icon(Icons.verified,
+                                        size: 18, color: Colors.green),
+                                  ],
+                                ],
                               ),
                               const SizedBox(height: 4),
                               // Рейтинг слева + Referral ID справа
@@ -308,9 +350,11 @@ class _HomePageState extends State<HomePage> {
                                         ClipboardData(text: d.id.toString()),
                                       );
                                       if (context.mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
                                           SnackBar(
-                                            content: Text(t(context, 'common.copied')),
+                                            content: Text(
+                                                t(context, 'common.copied')),
                                           ),
                                         );
                                       }
@@ -384,57 +428,128 @@ class _HomePageState extends State<HomePage> {
                   const SizedBox(height: 12),
 
                   // Verification status
-                  _InfoCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          t(context, 'home.verification.title'),
-                          style: theme.textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 8),
-                        _VerificationBadge(status: status),
-
-                        // Причина отказа
-                        if (status == DriverVerificationStatus.rejected &&
-                            (_details?.rejectionReason?.isNotEmpty ?? false)) ...[
-                          const SizedBox(height: 8),
+                  if (status != DriverVerificationStatus.verified) ...[
+                    _InfoCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                           Text(
-                            t(context, 'home.verification.rejected_reason'),
-                            style: theme.textTheme.bodyMedium
+                            t(context, 'home.verification.title'),
+                            style: theme.textTheme.titleMedium
                                 ?.copyWith(fontWeight: FontWeight.w600),
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            _details!.rejectionReason!,
-                            style: theme.textTheme.bodyMedium,
-                          ),
-                        ],
+                          const SizedBox(height: 8),
+                          _VerificationBadge(status: status),
 
-                        if (status == DriverVerificationStatus.needVerification ||
-                            status == DriverVerificationStatus.rejected) ...[
-                          const SizedBox(height: 12),
-                          SizedBox(
-                            width: double.infinity,
-                            child: FilledButton.icon(
-                              onPressed: () async {
-                                final res = await Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                      builder: (_) => const VerificationPage()),
-                                );
-                                if (res == true && mounted) {
-                                  await _load();
-                                }
-                              },
-                              icon: const Icon(Icons.verified_user),
-                              label: Text(t(context, 'verification.open')),
+                          // Причина отказа
+                          if (status == DriverVerificationStatus.rejected &&
+                              (_details?.rejectionReason?.isNotEmpty ??
+                                  false)) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              t(context, 'home.verification.rejected_reason'),
+                              style: theme.textTheme.bodyMedium
+                                  ?.copyWith(fontWeight: FontWeight.w600),
                             ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _details!.rejectionReason!,
+                              style: theme.textTheme.bodyMedium,
+                            ),
+                          ],
+
+                          if (status ==
+                                  DriverVerificationStatus.needVerification ||
+                              status == DriverVerificationStatus.rejected) ...[
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              width: double.infinity,
+                              child: FilledButton.icon(
+                                onPressed: () async {
+                                  final res = await Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                        builder: (_) =>
+                                            const VerificationPage()),
+                                  );
+                                  if (res == true && mounted) {
+                                    await _load();
+                                  }
+                                },
+                                icon: const Icon(Icons.verified_user),
+                                label: Text(t(context, 'verification.open')),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+
+                  // Transactions
+                  Text(
+                    t(context, 'home.transactions.title'),
+                    style: theme.textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 8),
+
+                  if (_txLoading)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 16),
+                        child: CircularProgressIndicator(),
+                      ),
+                    )
+                  else if (_txError != null)
+                    _InfoCard(
+                      child: Row(
+                        children: [
+                          const Icon(Icons.error_outline),
+                          const SizedBox(width: 12),
+                          Expanded(child: Text(_txError!)),
+                          const SizedBox(width: 8),
+                          OutlinedButton(
+                            onPressed: _load,
+                            child: Text(t(context, 'common.retry')),
                           ),
                         ],
-                      ],
+                      ),
+                    )
+                  else if (_transactions.isEmpty)
+                    _InfoCard(
+                      child: Row(
+                        children: [
+                          const Icon(Icons.receipt_long_outlined),
+                          const SizedBox(width: 12),
+                          Expanded(
+                              child:
+                                  Text(t(context, 'home.transactions.empty'))),
+                        ],
+                      ),
+                    )
+                  else
+                    _InfoCard(
+                      child: Column(
+                        children: [
+                          for (int i = 0;
+                              i <
+                                  (_transactions.length > 10
+                                      ? 10
+                                      : _transactions.length);
+                              i++) ...[
+                            _TxItem(tx: _transactions[i]),
+                            if (i !=
+                                (_transactions.length > 10
+                                        ? 10
+                                        : _transactions.length) -
+                                    1)
+                              const Divider(height: 16),
+                          ],
+                        ],
+                      ),
                     ),
-                  ),
+
                   const SizedBox(height: 12),
                   // … другие секции
                 ],
@@ -501,9 +616,10 @@ class _HomePageState extends State<HomePage> {
                 onPressed: _refBusy ? null : _setReferal,
                 icon: _refBusy
                     ? const SizedBox(
-                  width: 16, height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
                     : const Icon(Icons.link),
                 label: Text(t(context, 'home.referral.attach')),
               ),
@@ -520,6 +636,7 @@ class _HomePageState extends State<HomePage> {
 
 class _InfoCard extends StatelessWidget {
   final Widget child;
+
   const _InfoCard({required this.child});
 
   @override
@@ -545,6 +662,7 @@ class _InfoCard extends StatelessWidget {
 
 class _VerificationBadge extends StatelessWidget {
   final DriverVerificationStatus status;
+
   const _VerificationBadge({required this.status});
 
   @override
@@ -554,19 +672,23 @@ class _VerificationBadge extends StatelessWidget {
 
     switch (status) {
       case DriverVerificationStatus.needVerification:
-        label = ApiService.getTranslationForWidget(context, 'home.verification.need');
+        label = ApiService.getTranslationForWidget(
+            context, 'home.verification.need');
         color = Colors.red;
         break;
       case DriverVerificationStatus.awaitingVerification:
-        label = ApiService.getTranslationForWidget(context, 'home.verification.pending');
+        label = ApiService.getTranslationForWidget(
+            context, 'home.verification.pending');
         color = Colors.amber;
         break;
       case DriverVerificationStatus.verified:
-        label = ApiService.getTranslationForWidget(context, 'home.verification.verified');
+        label = ApiService.getTranslationForWidget(
+            context, 'home.verification.verified');
         color = Colors.green;
         break;
       case DriverVerificationStatus.rejected:
-        label = ApiService.getTranslationForWidget(context, 'home.verification.rejected');
+        label = ApiService.getTranslationForWidget(
+            context, 'home.verification.rejected');
         color = Colors.red;
         break;
     }
@@ -596,6 +718,7 @@ class _VerificationBadge extends StatelessWidget {
 class _AccountSquareCard extends StatelessWidget {
   final DriverAccount account;
   final bool highlighted;
+
   const _AccountSquareCard({required this.account, this.highlighted = false});
 
   @override
@@ -610,7 +733,8 @@ class _AccountSquareCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: theme.colorScheme.surface,
           borderRadius: BorderRadius.circular(14),
-          boxShadow: highlighted ? kElevationToShadow[3] : kElevationToShadow[1],
+          boxShadow:
+              highlighted ? kElevationToShadow[3] : kElevationToShadow[1],
           border: Border.all(
             color: highlighted
                 ? theme.colorScheme.primary.withOpacity(0.6)
@@ -622,28 +746,33 @@ class _AccountSquareCard extends StatelessWidget {
           children: [
             Text(
               account.name.isEmpty
-                  ? ApiService.getTranslationForWidget(context, 'home.account.default_name')
+                  ? ApiService.getTranslationForWidget(
+                      context, 'home.account.default_name')
                   : account.name,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+              style: theme.textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w700),
             ),
             const Spacer(),
             Text(
               _formatMoney(account.balance, account.currency),
-              style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+              style: theme.textTheme.titleLarge
+                  ?.copyWith(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 6),
             Row(
               children: [
-                Icon(Icons.account_balance_wallet, size: 16, color: theme.hintColor),
+                Icon(Icons.account_balance_wallet,
+                    size: 16, color: theme.hintColor),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     '${account.currency}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: theme.hintColor),
                   ),
                 ),
               ],
@@ -658,7 +787,7 @@ class _AccountSquareCard extends StatelessWidget {
     final whole = v.truncate();
     final frac = ((v - whole) * 100).round().toString().padLeft(2, '0');
     final wholeStr = _thousandsSep(whole);
-//    return '$wholeStr.$frac $currencyCode';
+    // return '$wholeStr.$frac $currencyCode';
     return '$wholeStr $currencyCode';
   }
 
@@ -681,6 +810,7 @@ class _AccountSquareCard extends StatelessWidget {
 class _Dots extends StatelessWidget {
   final int count;
   final int index;
+
   const _Dots({required this.count, required this.index});
 
   @override
@@ -701,6 +831,128 @@ class _Dots extends StatelessWidget {
           ),
         );
       }),
+    );
+  }
+}
+
+// ===== Transactions row =====
+class _TxItem extends StatelessWidget {
+  final DriverTransaction tx;
+
+  const _TxItem({required this.tx});
+
+  String _two(int n) => n.toString().padLeft(2, '0');
+
+  String _fmtDate(DateTime d) =>
+      '${_two(d.day)}.${_two(d.month)}.${d.year} ${_two(d.hour)}:${_two(d.minute)}';
+
+  String _formatMoney(double v, String currency) {
+    final sign = v >= 0 ? '' : '-';
+    final n = v.abs();
+    final whole = n.truncate();
+    final frac = ((n - whole) * 100).round().toString().padLeft(2, '0');
+    final s = _thousands(whole);
+    // так же как в аккаунтах — без копеек:
+    return '$sign$s $currency';
+    // с копейками: return '$sign$s.$frac $currency';
+  }
+
+  String _thousands(int n) {
+    final s = n.toString();
+    final b = StringBuffer();
+    var cnt = 0;
+    for (var i = s.length - 1; i >= 0; i--) {
+      b.write(s[i]);
+      cnt++;
+      if (cnt == 3 && i != 0) {
+        b.write(' ');
+        cnt = 0;
+      }
+    }
+    return b.toString().split('').reversed.join();
+  }
+
+  IconData _icon(String t) {
+    final x = t.toLowerCase();
+    if (x.contains('ride') || x.contains('trip')) return Icons.local_taxi;
+    if (x.contains('payout') || x.contains('withdraw'))
+      return Icons.payments_outlined;
+    if (x.contains('topup') || x.contains('deposit'))
+      return Icons.add_card_outlined;
+    if (x.contains('commission')) return Icons.receipt_long_outlined;
+    return Icons.swap_vert;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isPlus = tx.total >= 0;
+    final sumColor = isPlus ? Colors.green : Colors.red;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: theme.colorScheme.primary.withOpacity(0.10),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child:
+              Icon(_icon(tx.type), size: 20, color: theme.colorScheme.primary),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Заголовок
+              Text(
+                (tx.service.isNotEmpty ? tx.service : tx.type),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleSmall
+                    ?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              // Описание (если есть)
+              if (tx.description.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Text(
+                  tx.description,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall,
+                ),
+              ],
+              const SizedBox(height: 2),
+              Text(
+                _fmtDate(tx.date),
+                style:
+                    theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        // Суммы
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              _formatMoney(tx.total, tx.currency),
+              style: theme.textTheme.titleSmall
+                  ?.copyWith(fontWeight: FontWeight.w800, color: sumColor),
+            ),
+            if (tx.commission != 0)
+              Text(
+                '- ${_formatMoney(tx.commission, tx.currency)}',
+                style:
+                    theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
+              ),
+          ],
+        ),
+      ],
     );
   }
 }

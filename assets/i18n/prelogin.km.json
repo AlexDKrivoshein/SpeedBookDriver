@@ -54,6 +54,9 @@
   "home.referral.error": "បរាជ័យក្នុងការភ្ជាប់",
   "home.referral.current_prefix": "បានណែនាំដោយ",
   "home.referral.your_id": "លេខអ្នកណែនាំ",
+  "home.transactions.title": "ប្រតិបត្តិការចុងក្រោយ",
+  "home.transactions.empty": "មិនទាន់មានប្រតិបត្តិការទេ",
+
   "common.copy": "ចម្លង",
   "common.copied": "បានចម្លង",
 

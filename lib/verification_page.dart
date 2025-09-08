@@ -89,20 +89,42 @@ class _VerificationPageState extends State<VerificationPage> {
         },
       };
 
-      final reply =  ApiService.callAndDecode('submit_verification', payload)
+      final reply = await ApiService
+          .callAndDecode('submit_verification', payload)
           .timeout(const Duration(seconds: 120));
 
-      debugPrint('[Verification] send paygload: $reply');
+      final status = (reply is Map ? reply['status'] : null)?.toString().toUpperCase();
 
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(t(context, 'verification.snackbar.sent'))),
-      );
-      Navigator.of(context).pop(true);
+      if (status != 'OK') {
+        debugPrint('[Verification] reply status: $status');
+        final message = (reply is Map ? reply['message'] : null)?.toString().toUpperCase();
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(t(context, 'Error: $message'))),
+          );
+        }
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(t(context, 'verification.snackbar.sent'))),
+        );
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      }
     } on TimeoutException {
-      setState(() => _error = t(context, 'verification.error.timeout'));
-    } catch (e) {
-      setState(() => _error = e.toString());
+      debugPrint('[Verification] timeout 120s');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(t(context, 'common.timeout'))),
+        );
+      }
+    } catch (e, st) {
+      debugPrint('[Verification] error: $e\n$st');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${t(context, 'verification.snackbar.error')}: $e')),
+        );
+      }
     } finally {
       setState(() => _submitting = false);
     }

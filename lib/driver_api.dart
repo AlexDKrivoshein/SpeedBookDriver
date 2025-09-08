@@ -49,6 +49,8 @@ class DriverDetails {
     // ответ может быть сразу payload или обёртка { data: {...} }
     final root = (json['data'] is Map<String, dynamic>) ? json['data'] : json;
 
+    debugPrint('[DriverApi] get_driver_details: $root');
+
     final dynamic accAny = root['account'] ?? root['accounts'];
     final accList = (accAny is List)
         ? accAny.whereType<Map<String, dynamic>>().toList()
@@ -64,22 +66,6 @@ class DriverDetails {
       referal: root['referal']?.toString(),
       canAddReferal: root['can_add_referal'] == true,
     );
-  }
-}
-
-class DriverApi {
-  /// Возвращает подробности водителя (JWT-полезная нагрузка)
-  static Future<DriverDetails> getDriverDetails() async {
-    debugPrint('[DriverApi] get_driver_details');
-    final payload = await ApiService.callAndDecode('get_driver_details', const {});
-    return DriverDetails.fromJson(payload);
-  }
-
-  /// Установка реферала. Возвращает {status, message?}
-  static Future<Map<String, dynamic>> setReferal(String referalId) async {
-    final res = await ApiService.callPlain('set_referal', {'referal': referalId});
-    // ожидаем {status: 'OK'|'ERROR', message?: '...'}
-    return res;
   }
 }
 
@@ -107,12 +93,21 @@ class DriverTransaction {
   factory DriverTransaction.fromJson(Map<String, dynamic> j) {
     DateTime _parseDate(dynamic v) {
       if (v == null) return DateTime.fromMillisecondsSinceEpoch(0);
-      if (v is int) {
-        // сек/мс
-        return DateTime.fromMillisecondsSinceEpoch(v > 1e12 ? v : v * 1000, isUtc: true).toLocal();
+      if (v is num) {
+        final ms = v > 1e12 ? v.toInt() : (v * 1000).toInt();
+        return DateTime.fromMillisecondsSinceEpoch(ms, isUtc: true).toLocal();
       }
       if (v is String) {
-        try { return DateTime.parse(v).toLocal(); } catch (_) {}
+        // ISO-8601 или числовая строка
+        final s = v.trim();
+        final asNum = double.tryParse(s);
+        if (asNum != null) {
+          final ms = asNum > 1e12 ? asNum.toInt() : (asNum * 1000).toInt();
+          return DateTime.fromMillisecondsSinceEpoch(ms, isUtc: true).toLocal();
+        }
+        try {
+          return DateTime.parse(s).toLocal();
+        } catch (_) {}
       }
       return DateTime.fromMillisecondsSinceEpoch(0);
     }
@@ -145,4 +140,113 @@ class DriverTransaction {
     'commission': commission,
     'total': total,
   };
+}
+
+class DriverApi {
+  /// Возвращает подробности водителя (JWT-полезная нагрузка)
+  static Future<DriverDetails> getDriverDetails() async {
+    debugPrint('[DriverApi] get_driver_details');
+    final payload =
+    await ApiService.callAndDecode('get_driver_details', const {});
+    return DriverDetails.fromJson(payload);
+  }
+
+  /// Установка реферала. Возвращает {status, message?}
+  static Future<Map<String, dynamic>> setReferal(String referalId) async {
+    final res =
+    await ApiService.callAndDecode('set_referal', {'referal': referalId});
+    // ожидаем {status: 'OK'|'ERROR', message?: '...'}
+    return res;
+  }
+
+  /// Получить список транзакций водителя
+  static Future<List<DriverTransaction>> getDriverTransactions({
+    DateTime? from, // опциональные фильтры
+    DateTime? to,
+    int? limit,
+    int? offset,
+  }) async {
+    final payload = <String, dynamic>{
+      if (from != null) 'from': from.toUtc().toIso8601String(),
+      if (to != null) 'to': to.toUtc().toIso8601String(),
+      if (limit != null) 'limit': limit,
+      if (offset != null) 'offset': offset,
+    };
+
+    dynamic res;
+    try {
+      res = await ApiService.callAndDecode(
+          'get_driver_transactions', payload);
+    } catch (e, st) {
+      debugPrint('[DriverApi] get_driver_transactions call failed: $e\n$st');
+      rethrow;
+    }
+
+    // Универсальный извлекатель списка транзакций
+    List<Map<String, dynamic>> _extractList(dynamic x) {
+      if (x == null) return const <Map<String, dynamic>>[];
+
+      // Если сразу пришёл список
+      if (x is List) {
+        return x.whereType<Map<String, dynamic>>().toList();
+      }
+
+      if (x is Map) {
+        // Если сервер завернул в статус
+        final status = x['status']?.toString().toUpperCase();
+        if (status == 'ERROR') {
+          final msg = x['message'] ?? x['error'] ?? 'unknown_error';
+          throw Exception('get_driver_transactions: $msg');
+        }
+
+        // Частые ключи
+        final keys = [
+          'transactions',
+          'rows',
+          'items',
+          'result',
+          'list',
+        ];
+
+        for (final k in keys) {
+          final v = x[k];
+          if (v is List) {
+            return v.whereType<Map<String, dynamic>>().toList();
+          }
+        }
+
+        // Иногда данные внутри data: {...} или data: [...]
+        final data = x['data'];
+        if (data is List) {
+          return data.whereType<Map<String, dynamic>>().toList();
+        }
+        if (data is Map) {
+          for (final k in keys) {
+            final v = data[k];
+            if (v is List) {
+              return v.whereType<Map<String, dynamic>>().toList();
+            }
+          }
+          // Иногда data сама — это одна запись
+          if (data.isNotEmpty) {
+            return [data.cast<String, dynamic>()];
+          }
+        }
+
+        // Если корнем является одна запись
+        if (x.isNotEmpty) {
+          return [x.cast<String, dynamic>()];
+        }
+      }
+
+      return const <Map<String, dynamic>>[];
+    }
+
+    final list = _extractList(res);
+    if (list.isEmpty && kDebugMode) {
+      debugPrint('[DriverApi] get_driver_transactions: empty or unexpected shape: $res');
+    }
+
+    return list.map((e) => DriverTransaction.fromJson(e)).toList();
+  }
 }
