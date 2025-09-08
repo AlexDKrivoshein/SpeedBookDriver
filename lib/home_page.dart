@@ -54,6 +54,9 @@ class _HomePageState extends State<HomePage> {
 
   late final PageController _pageController;
   late final ImageProvider _bg;
+  static const double _bgScale = 1.15;
+  static const double _bgOpacityLight = 0.18;
+  static const double _bgOpacityDark  = 0.10;
 
   @override
   void initState() {
@@ -144,6 +147,46 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  Widget _buildBackground(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final opacity = isDark ? _bgOpacityDark : _bgOpacityLight;
+
+    return Positioned.fill(
+      child: Transform.scale(
+        scale: _bgScale,
+        alignment: Alignment.topLeft,
+        child: Image(
+          image: _bg,
+          fit: BoxFit.none,
+          repeat: ImageRepeat.repeat,
+          alignment: Alignment.topLeft,
+          filterQuality: FilterQuality.none,
+          excludeFromSemantics: true,
+          opacity: AlwaysStoppedAnimation(opacity),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSoftGradient() => Positioned.fill(
+    child: IgnorePointer(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.white.withOpacity(0.65),
+              Colors.white.withOpacity(0.0),
+              Colors.white.withOpacity(0.70),
+            ],
+            stops: const [0.0, 0.22, 1.0],
+          ),
+        ),
+      ),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final theme = Brand.theme(Theme.of(context));
@@ -205,13 +248,8 @@ class _HomePageState extends State<HomePage> {
         body: Stack(
           children: [
             // 1) Фон
-            Positioned.fill(
-              child: Transform.scale(
-                scale: 1.15, // немного крупнее плитку
-                alignment: Alignment.topLeft,
-                child: Image(image: _bg, fit: BoxFit.none, repeat: ImageRepeat.repeat, opacity: const AlwaysStoppedAnimation(0.22)),
-              ),
-            ),
+            _buildBackground(context),
+            // _buildSoftGradient(),
             // 3) Контент
             RefreshIndicator(
               onRefresh: () async => _load(),

@@ -82,3 +82,67 @@ class DriverApi {
     return res;
   }
 }
+
+class DriverTransaction {
+  final DateTime date;
+  final String type;
+  final String currency;
+  final String service;
+  final double amount;
+  final String description;
+  final double commission;
+  final double total;
+
+  DriverTransaction({
+    required this.date,
+    required this.type,
+    required this.currency,
+    required this.service,
+    required this.amount,
+    required this.description,
+    required this.commission,
+    required this.total,
+  });
+
+  factory DriverTransaction.fromJson(Map<String, dynamic> j) {
+    DateTime _parseDate(dynamic v) {
+      if (v == null) return DateTime.fromMillisecondsSinceEpoch(0);
+      if (v is int) {
+        // сек/мс
+        return DateTime.fromMillisecondsSinceEpoch(v > 1e12 ? v : v * 1000, isUtc: true).toLocal();
+      }
+      if (v is String) {
+        try { return DateTime.parse(v).toLocal(); } catch (_) {}
+      }
+      return DateTime.fromMillisecondsSinceEpoch(0);
+    }
+
+    double _toDouble(dynamic v) {
+      if (v is num) return v.toDouble();
+      if (v is String) return double.tryParse(v.replaceAll(',', '.')) ?? 0.0;
+      return 0.0;
+    }
+
+    return DriverTransaction(
+      date: _parseDate(j['date']),
+      type: (j['type'] ?? '').toString(),
+      currency: (j['currency'] ?? '').toString(),
+      service: (j['service'] ?? '').toString(),
+      amount: _toDouble(j['amount']),
+      description: (j['description'] ?? '').toString(),
+      commission: _toDouble(j['commission']),
+      total: _toDouble(j['total']),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'date': date.toIso8601String(),
+    'type': type,
+    'currency': currency,
+    'service': service,
+    'amount': amount,
+    'description': description,
+    'commission': commission,
+    'total': total,
+  };
+}
