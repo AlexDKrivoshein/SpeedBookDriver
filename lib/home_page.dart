@@ -1,8 +1,10 @@
 // lib/home_page.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'api_service.dart';
+import 'driver_api.dart';
 import 'brand.dart';
 import 'brand_header.dart';
 import 'verification_page.dart';
@@ -42,6 +44,8 @@ class _HomePageState extends State<HomePage> {
   String? _error;
   int _currentPage = 0;
 
+  //static const _assetPattern = 'assets/brand/background.png';
+  static const _assetPattern = 'assets/brand/background_alpha.png';
   // --- Referral state ---
   String? _referalName;          // непустая строка => уже подключён
   bool _canAddReferal = false;   // можно ли сейчас привязать
@@ -49,11 +53,13 @@ class _HomePageState extends State<HomePage> {
   bool _refBusy = false;         // крутилка на кнопке
 
   late final PageController _pageController;
+  late final ImageProvider _bg;
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController(viewportFraction: 0.62);
+    _bg = const AssetImage(_assetPattern);
     _load();
   }
 
@@ -64,6 +70,12 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    precacheImage(_bg, context);
+  }
+
   Future<void> _load() async {
     if (!mounted) return;
     setState(() {
@@ -72,7 +84,7 @@ class _HomePageState extends State<HomePage> {
     });
 
     try {
-      final d = await ApiService.getDriverDetails()
+      final d = await DriverApi.getDriverDetails()
           .timeout(const Duration(seconds: 15));
       if (!mounted) return;
       setState(() {
@@ -107,22 +119,20 @@ class _HomePageState extends State<HomePage> {
 
     setState(() => _refBusy = true);
     try {
-      final res = await ApiService.callAndDecode('set_referal', {'referal': id});
-
-      if (res is Map && res['status'] != 'OK') {
+      final res = await DriverApi.setReferal(id);
+      if (res['status'] != 'OK') {
         final code = res['message']?.toString() ?? 'unknown_error';
-        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('${t(context, 'home.referral.error')}: $code')),
         );
-      } else {
-        await _load(); // подтягиваем новые данные
-        _referalCtrl.clear();
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(t(context, 'home.referral.success'))),
-        );
+        return;
       }
+
+      await _load();
+      _referalCtrl.clear();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(t(context, 'home.referral.success'))),
+      );
     } catch (e) {
       debugPrint('[Referral] set_referal error: $e');
       if (!mounted) return;
@@ -186,175 +196,213 @@ class _HomePageState extends State<HomePage> {
     final d = _details!;
     final accounts = d.accounts;
     final status = _statusFromClass(d.driverClass);
+    final bgOpacity = Theme.of(context).brightness == Brightness.dark ? 0.06 : 0.12;
 
     return Theme(
       data: theme,
       child: Scaffold(
         appBar: BrandHeader(),
-        body: RefreshIndicator(
-          onRefresh: () async {
-            await _load();
-          },
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              // Driver info (name + rating)
-              _InfoCard(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    CircleAvatar(
-                      radius: 24,
-                      child: Text(
-                        _initials(d.name),
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            d.name.isEmpty ? '—' : d.name,
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
+        body: Stack(
+          children: [
+            // 1) Фон
+            Positioned.fill(
+              child: Transform.scale(
+                scale: 1.15, // немного крупнее плитку
+                alignment: Alignment.topLeft,
+                child: Image(image: _bg, fit: BoxFit.none, repeat: ImageRepeat.repeat, opacity: const AlwaysStoppedAnimation(0.22)),
+              ),
+            ),
+            // 3) Контент
+            RefreshIndicator(
+              onRefresh: () async => _load(),
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  // Driver info (name + rating + your referral id)
+                  _InfoCard(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        CircleAvatar(
+                          radius: 24,
+                          child: Text(
+                            _initials(d.name),
+                            style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
-                          const SizedBox(height: 4),
-                          Row(
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Icon(Icons.star, size: 16),
-                              const SizedBox(width: 6),
+                              // Имя
                               Text(
-                                d.rating.isEmpty
-                                    ? '${t(context, "home.rating")}: —'
-                                    : '${t(context, "home.rating")}: ${d.rating}',
-                                style: theme.textTheme.bodyMedium,
+                                d.name.isEmpty ? '—' : d.name,
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              // Рейтинг слева + Referral ID справа
+                              Row(
+                                children: [
+                                  const Icon(Icons.star, size: 16),
+                                  const SizedBox(width: 6),
+                                  Flexible(
+                                    child: Text(
+                                      d.rating.isEmpty ? '—' : d.rating,
+                                      style: theme.textTheme.bodyMedium,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  const Icon(Icons.tag, size: 16),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    '${t(context, "home.referral.your_id")}: ${d.id}',
+                                    style: theme.textTheme.bodyMedium,
+                                  ),
+                                  IconButton(
+                                    tooltip: t(context, 'common.copy'),
+                                    icon: const Icon(Icons.copy, size: 18),
+                                    onPressed: () async {
+                                      await Clipboard.setData(
+                                        ClipboardData(text: d.id.toString()),
+                                      );
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text(t(context, 'common.copied')),
+                                          ),
+                                        );
+                                      }
+                                    },
+                                  ),
+                                ],
                               ),
                             ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Referral (к кому привязан) — ПЕРЕД аккаунтами
+                  _buildReferralCard(),
+                  const SizedBox(height: 12),
+
+                  // Accounts carousel
+                  Text(
+                    t(context, 'home.accounts.title'),
+                    style: theme.textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 8),
+
+                  if (accounts.isNotEmpty)
+                    SizedBox(
+                      height: 140, // компактнее
+                      child: PageView.builder(
+                        controller: _pageController,
+                        itemCount: accounts.length,
+                        onPageChanged: (i) => setState(() => _currentPage = i),
+                        itemBuilder: (context, index) {
+                          final acc = accounts[index];
+                          final isActive = index == _currentPage;
+                          return AnimatedPadding(
+                            duration: const Duration(milliseconds: 200),
+                            padding: EdgeInsets.symmetric(
+                              horizontal: isActive ? 6 : 10,
+                              vertical: isActive ? 0 : 8,
+                            ),
+                            child: _AccountSquareCard(
+                              account: acc,
+                              highlighted: isActive,
+                            ),
+                          );
+                        },
+                      ),
+                    )
+                  else
+                    _InfoCard(
+                      child: Row(
+                        children: [
+                          const Icon(Icons.account_balance_wallet),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              t(context, 'home.accounts.empty'),
+                              style: theme.textTheme.bodyMedium,
+                            ),
                           ),
                         ],
                       ),
                     ),
+                  if (accounts.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    _Dots(count: accounts.length, index: _currentPage),
                   ],
-                ),
-              ),
-              const SizedBox(height: 12),
+                  const SizedBox(height: 12),
 
-              // Accounts carousel
-              Text(
-                t(context, 'home.accounts.title'),
-                style: theme.textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 8),
+                  // Verification status
+                  _InfoCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          t(context, 'home.verification.title'),
+                          style: theme.textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 8),
+                        _VerificationBadge(status: status),
 
-              if (accounts.isNotEmpty)
-                SizedBox(
-                  height: 180,
-                  child: PageView.builder(
-                    controller: _pageController,
-                    itemCount: accounts.length,
-                    onPageChanged: (i) => setState(() => _currentPage = i),
-                    itemBuilder: (context, index) {
-                      final acc = accounts[index];
-                      final isActive = index == _currentPage;
-                      return AnimatedPadding(
-                        duration: const Duration(milliseconds: 200),
-                        padding: EdgeInsets.symmetric(
-                          horizontal: isActive ? 6 : 10,
-                          vertical: isActive ? 0 : 8,
-                        ),
-                        child: _AccountSquareCard(
-                          account: acc,
-                          highlighted: isActive,
-                        ),
-                      );
-                    },
-                  ),
-                )
-              else
-                _InfoCard(
-                  child: Row(
-                    children: [
-                      const Icon(Icons.account_balance_wallet),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          t(context, 'home.accounts.empty'),
-                          style: theme.textTheme.bodyMedium,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              if (accounts.isNotEmpty) ...[
-                const SizedBox(height: 6),
-                _Dots(count: accounts.length, index: _currentPage),
-              ],
-              const SizedBox(height: 12),
+                        // Причина отказа
+                        if (status == DriverVerificationStatus.rejected &&
+                            (_details?.rejectionReason?.isNotEmpty ?? false)) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            t(context, 'home.verification.rejected_reason'),
+                            style: theme.textTheme.bodyMedium
+                                ?.copyWith(fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _details!.rejectionReason!,
+                            style: theme.textTheme.bodyMedium,
+                          ),
+                        ],
 
-              // Verification status
-              _InfoCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      t(context, 'home.verification.title'),
-                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                        if (status == DriverVerificationStatus.needVerification ||
+                            status == DriverVerificationStatus.rejected) ...[
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton.icon(
+                              onPressed: () async {
+                                final res = await Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                      builder: (_) => const VerificationPage()),
+                                );
+                                if (res == true && mounted) {
+                                  await _load();
+                                }
+                              },
+                              icon: const Icon(Icons.verified_user),
+                              label: Text(t(context, 'verification.open')),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
-                    const SizedBox(height: 8),
-                    _VerificationBadge(status: status),
-
-                    // Причина отказа
-                    if (status == DriverVerificationStatus.rejected &&
-                        (_details?.rejectionReason?.isNotEmpty ?? false)) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        t(context, 'home.verification.rejected_reason'),
-                        style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _details!.rejectionReason!,
-                        style: theme.textTheme.bodyMedium,
-                      ),
-                    ],
-
-                    if (status == DriverVerificationStatus.needVerification ||
-                        status == DriverVerificationStatus.rejected) ...[
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.icon(
-                          onPressed: () async {
-                            final res = await Navigator.of(context).push(
-                              MaterialPageRoute(builder: (_) => const VerificationPage()),
-                            );
-                            if (res == true && mounted) {
-                              await _load();
-                            }
-                          },
-                          icon: const Icon(Icons.verified_user),
-                          label: Text(t(context, 'verification.open')),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 12),
+                  // … другие секции
+                ],
               ),
-
-              const SizedBox(height: 12),
-
-              // Referral
-              _buildReferralCard(),
-
-              const SizedBox(height: 12),
-
-              // … другие секции
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -523,7 +571,7 @@ class _AccountSquareCard extends StatelessWidget {
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: theme.colorScheme.surface,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(14),
           boxShadow: highlighted ? kElevationToShadow[3] : kElevationToShadow[1],
           border: Border.all(
             color: highlighted
@@ -545,7 +593,7 @@ class _AccountSquareCard extends StatelessWidget {
             const Spacer(),
             Text(
               _formatMoney(account.balance, account.currency),
-              style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+              style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 6),
             Row(
@@ -554,7 +602,7 @@ class _AccountSquareCard extends StatelessWidget {
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    '${account.currency} · ${t(context, "home.account.id")}: ${account.id}',
+                    '${account.currency}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),

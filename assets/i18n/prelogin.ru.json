@@ -52,7 +52,10 @@
   "home.referral.success": "Реферал успешно подключён",
   "home.referral.enter_id": "Введите ID реферала",
   "home.referral.error": "Не удалось подключить",
-  "home.referral.current_prefix": "Реферал",
+  "home.referral.current_prefix": "Пригласил",
+  "home.referral.your_id": "Referral ID",
+  "common.copy": "Скопировать",
+  "common.copied": "Скопировано",
 
   "common.retry": "Повторить",
   "common.timeout": "Время ожидания истекло. Попробуйте снова.",

@@ -52,7 +52,10 @@
   "home.referral.success": "ភ្ជាប់អ្នកណែនាំបានជោគជ័យ",
   "home.referral.enter_id": "បញ្ចូលលេខសម្គាល់អ្នកណែនាំ",
   "home.referral.error": "បរាជ័យក្នុងការភ្ជាប់",
-  "home.referral.current_prefix": "អ្នកណែនាំ",
+  "home.referral.current_prefix": "បានណែនាំដោយ",
+  "home.referral.your_id": "លេខអ្នកណែនាំ",
+  "common.copy": "ចម្លង",
+  "common.copied": "បានចម្លង",
 
   "common.retry": "ព្យាយាមម្ដងទៀត",
   "common.timeout": "ពេលវេលាអស់ហើយ។ សូមព្យាយាមម្ដងទៀត។",

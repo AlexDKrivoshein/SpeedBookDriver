@@ -52,7 +52,10 @@
   "home.referral.success": "Referral attached",
   "home.referral.enter_id": "Enter referral ID",
   "home.referral.error": "Failed to attach",
-  "home.referral.current_prefix": "Referral",
+  "home.referral.current_prefix": "Referred by",
+  "home.referral.your_id": "Referral ID",
+  "common.copy": "Copy",
+  "common.copied": "Copied",
 
   "common.retry": "Retry",
   "common.timeout": "Request timed out. Please try again.",
