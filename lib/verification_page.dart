@@ -75,6 +75,8 @@ class _VerificationPageState extends State<VerificationPage> {
       _error = null;
     });
 
+    debugPrint('[Verification] submit verification');
+
     try {
       String b64(File? f) => f == null ? '' : base64Encode(f.readAsBytesSync());
 
@@ -87,8 +89,10 @@ class _VerificationPageState extends State<VerificationPage> {
         },
       };
 
-      await ApiService.callAndDecode('submit_verification', payload)
+      final reply =  ApiService.callAndDecode('submit_verification', payload)
           .timeout(const Duration(seconds: 120));
+
+      debugPrint('[Verification] send paygload: $reply');
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -112,9 +116,6 @@ class _VerificationPageState extends State<VerificationPage> {
       data: theme,
       child: Scaffold(
         appBar: BrandHeader(
-//          title: t(context, 'verification.title'),
-          title: '',
-          logoAsset: 'assets/brand/speedbook.png',
           showBack: true,
         ),
         body: SafeArea(

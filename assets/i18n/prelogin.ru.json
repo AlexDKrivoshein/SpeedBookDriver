@@ -46,6 +46,13 @@
   "home.verification.verified": "Верифицирован",
   "home.verification.rejected": "Верификация отклонена",
   "home.verification.rejected_reason": "Причина",
+  "home.referral.title": "Добавить реферала",
+  "home.referral.id_label": "ID реферала",
+  "home.referral.attach": "Подключить",
+  "home.referral.success": "Реферал успешно подключён",
+  "home.referral.enter_id": "Введите ID реферала",
+  "home.referral.error": "Не удалось подключить",
+  "home.referral.current_prefix": "Реферал",
 
   "common.retry": "Повторить",
   "common.timeout": "Время ожидания истекло. Попробуйте снова.",
@@ -53,6 +60,8 @@
   "common.success": "Успешно!",
   "common.hide": "Скрыть",
   "common.network_error": "Проблемы с сетью",
+  "common.next": "Далее",
+  "common.back": "Назад",
 
   "verification.title": "Верификация",
   "verification.open": "Пройти верификацию",

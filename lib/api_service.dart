@@ -49,7 +49,6 @@ class ApiService {
 
   static Map<String, String> _translations = {};        // сетевые переводы
   static Map<String, String> _translationsLocal = {};   // локальные из assets (prelogin)
-  static bool _translationsLoaded = false;
   static bool _loadingTranslationsNow = false;
   static bool _preloginLoaded = false;
   static String? _appSystemName;
@@ -156,6 +155,8 @@ class ApiService {
 
     final jwt = JWT(body).sign(SecretKey(secret));
     final url = Uri.parse('$apiUrl/mapi/$apiName');
+
+    debugPrint('[ApiService] call url: $url');
 
     http.Response? response;
     for (var attempt = 0; attempt < _maxAttempts; attempt++) {
@@ -313,64 +314,6 @@ class ApiService {
     }
   }
 
-  // ==== сетевые переводы (после логина) ====
-  static Future<void> loadTranslations({String? lang}) async {
-    final prefs = await SharedPreferences.getInstance();
-
-    // 1) поднимаем кэш
-    final cached = prefs.getString('translations_cache_${lang ?? 'default'}');
-    if (cached != null) {
-      try {
-        final Map<String, dynamic> decoded = jsonDecode(cached);
-        _translations = decoded.map((k, v) => MapEntry(k, v.toString()));
-      } catch (_) {}
-    }
-
-    // 2) нет токена/секрета — не лезем в сеть (разрыв циклов до авторизации)
-    final hasToken  = (prefs.getString('token')  ?? '').isNotEmpty;
-    final hasSecret = (prefs.getString('secret') ?? '').isNotEmpty;
-    if (!hasToken || !hasSecret) {
-      _translationsLoaded = true;
-      return;
-    }
-
-    // 3) anti-reentry
-    if (_loadingTranslationsNow) { _translationsLoaded = true; return; }
-    _loadingTranslationsNow = true;
-
-    try {
-      final module  = await _getAppSystemName();
-      final payload = <String, dynamic>{'module': module};
-      if (lang != null) payload['lang'] = lang;
-
-      final decodedJson  = await callPlain('get_translations', payload);
-      final translations = decodedJson['data'];
-
-      if (translations is Map<String, dynamic>) {
-        _translations = translations.map((k, v) => MapEntry(k.toString(), v.toString()));
-        await prefs.setString('translations_cache_${lang ?? 'default'}', jsonEncode(_translations));
-      } else if (translations is List) {
-        final Map<String, String> map = {};
-        for (final item in translations) {
-          if (item is Map && item['key'] != null && item['value'] != null) {
-            map[item['key'].toString()] = item['value'].toString();
-          }
-        }
-        if (map.isNotEmpty) {
-          _translations = map;
-          await prefs.setString('translations_cache_${lang ?? 'default'}', jsonEncode(_translations));
-        } else {
-          await prefs.remove('translations_cache_${lang ?? 'default'}');
-        }
-      }
-    } catch (e) {
-      debugPrint('Failed to load translations: $e');
-    } finally {
-      _loadingTranslationsNow = false;
-      _translationsLoaded = true;
-    }
-  }
-
   static bool _logMissingTranslations = true;
 
   static String getTranslation(String widgetName, String key) {
@@ -451,7 +394,6 @@ class ApiService {
     _preloginLoaded = false;
 
     await loadPreloginTranslations(lang: lang);
-    await loadTranslations(lang: lang);
   }
 
   static Future<DriverDetails> getDriverDetails() async {
@@ -494,6 +436,8 @@ class DriverDetails {
   final String rating;
   final List<DriverAccount> accounts;
   final String? rejectionReason;
+  final String? referal;
+  final bool canAddReferal;
 
   DriverDetails({
     required this.name,
@@ -501,6 +445,8 @@ class DriverDetails {
     required this.rating,
     required this.accounts,
     this.rejectionReason,
+    required this.referal,
+    this.canAddReferal = false,
   });
 
   factory DriverDetails.fromJson(Map<String, dynamic> json) {
@@ -519,6 +465,8 @@ class DriverDetails {
       rating: root['rating']?.toString() ?? '',
       accounts: accList.map((m) => DriverAccount.fromJson(m)).toList(),
       rejectionReason: root['reason']?.toString(),
+      referal: root['referal']?.toString() ?? '',
+      canAddReferal: root['can_add_referal'] == true,
     );
   }
 }

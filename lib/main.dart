@@ -201,7 +201,7 @@ class _RootState extends State<_Root> {
               : (profile['lang'] as String?)?.toLowerCase() ??
               ui.window.locale.languageCode.toLowerCase();
 
-          await ApiService.loadTranslations(lang: userLang);
+          //await ApiService.loadTranslations(lang: userLang);
           if (mounted) {
             await context.read<Translations>().setLang(userLang);
             setState(() {
@@ -219,7 +219,7 @@ class _RootState extends State<_Root> {
             ? savedLang
             : ui.window.locale.languageCode.toLowerCase();
 
-        await ApiService.loadTranslations(lang: guestLang);
+        //await ApiService.loadTranslations(lang: guestLang);
         if (mounted) {
           await context.read<Translations>().setLang(guestLang);
           setState(() {

@@ -146,10 +146,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
     return Theme(
       data: theme,
       child: Scaffold(
-        appBar: const BrandHeader(
-          logoAsset: 'assets/brand/speedbook.png',
-          showBack: false,
-        ),
+        appBar: const BrandHeader(),
         body: SafeArea(
           child: _loading
               ? const Center(child: CircularProgressIndicator())

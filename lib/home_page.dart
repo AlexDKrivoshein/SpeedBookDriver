@@ -42,6 +42,12 @@ class _HomePageState extends State<HomePage> {
   String? _error;
   int _currentPage = 0;
 
+  // --- Referral state ---
+  String? _referalName;          // непустая строка => уже подключён
+  bool _canAddReferal = false;   // можно ли сейчас привязать
+  final TextEditingController _referalCtrl = TextEditingController();
+  bool _refBusy = false;         // крутилка на кнопке
+
   late final PageController _pageController;
 
   @override
@@ -54,6 +60,7 @@ class _HomePageState extends State<HomePage> {
   @override
   void dispose() {
     _pageController.dispose();
+    _referalCtrl.dispose();
     super.dispose();
   }
 
@@ -70,12 +77,14 @@ class _HomePageState extends State<HomePage> {
       if (!mounted) return;
       setState(() {
         _details = d;
+        _referalName = d.referal;
+        _canAddReferal = d.canAddReferal;
         _loading = false;
       });
     } on TimeoutException {
       if (!mounted) return;
       setState(() {
-        _error = t(context, 'common.timeout'); // <-- ключ исправлен
+        _error = t(context, 'common.timeout');
         _loading = false;
       });
     } catch (e) {
@@ -84,6 +93,44 @@ class _HomePageState extends State<HomePage> {
         _error = e.toString();
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _setReferal() async {
+    final id = _referalCtrl.text.trim();
+    if (id.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(t(context, 'home.referral.enter_id'))),
+      );
+      return;
+    }
+
+    setState(() => _refBusy = true);
+    try {
+      final res = await ApiService.callAndDecode('set_referal', {'referal': id});
+
+      if (res is Map && res['status'] != 'OK') {
+        final code = res['message']?.toString() ?? 'unknown_error';
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${t(context, 'home.referral.error')}: $code')),
+        );
+      } else {
+        await _load(); // подтягиваем новые данные
+        _referalCtrl.clear();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(t(context, 'home.referral.success'))),
+        );
+      }
+    } catch (e) {
+      debugPrint('[Referral] set_referal error: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${t(context, 'home.referral.error')}: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _refBusy = false);
     }
   }
 
@@ -96,10 +143,7 @@ class _HomePageState extends State<HomePage> {
       return Theme(
         data: theme,
         child: Scaffold(
-          appBar: BrandHeader(
-            title: t(context, 'home.title'),
-            logoAsset: 'assets/brand/speedbook.png',
-          ),
+          appBar: BrandHeader(),
           body: const Center(child: CircularProgressIndicator()),
         ),
       );
@@ -110,10 +154,7 @@ class _HomePageState extends State<HomePage> {
       return Theme(
         data: theme,
         child: Scaffold(
-          appBar: BrandHeader(
-            title: t(context, 'home.title'),
-            logoAsset: 'assets/brand/speedbook.png',
-          ),
+          appBar: BrandHeader(),
           body: Center(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -149,12 +190,11 @@ class _HomePageState extends State<HomePage> {
     return Theme(
       data: theme,
       child: Scaffold(
-        appBar: BrandHeader(
-          title: t(context, 'home.title'),
-          logoAsset: 'assets/brand/speedbook.png',
-        ),
+        appBar: BrandHeader(),
         body: RefreshIndicator(
-          onRefresh: _load,
+          onRefresh: () async {
+            await _load();
+          },
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -292,7 +332,9 @@ class _HomePageState extends State<HomePage> {
                             final res = await Navigator.of(context).push(
                               MaterialPageRoute(builder: (_) => const VerificationPage()),
                             );
-                            if (res == true && mounted) _load();
+                            if (res == true && mounted) {
+                              await _load();
+                            }
                           },
                           icon: const Icon(Icons.verified_user),
                           label: Text(t(context, 'verification.open')),
@@ -303,6 +345,13 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
 
+              const SizedBox(height: 12),
+
+              // Referral
+              _buildReferralCard(),
+
+              const SizedBox(height: 12),
+
               // … другие секции
             ],
           ),
@@ -311,12 +360,75 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  // ---- helpers ----
+
   static String _initials(String s) {
     final parts = s.trim().split(RegExp(r'\s+'));
     if (parts.isEmpty || parts.first.isEmpty) return '🙂';
     final one = parts.first[0].toUpperCase();
     final two = parts.length > 1 ? parts[1][0].toUpperCase() : '';
     return '$one$two';
+  }
+
+  Widget _buildReferralCard() {
+    // уже подключён — просто показываем
+    if ((_referalName ?? '').isNotEmpty) {
+      return _InfoCard(
+        child: Row(
+          children: [
+            const Icon(Icons.handshake, size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                '${t(context, "home.referral.current_prefix")}: ${_referalName!}',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // можно добавить — поле ввода + кнопка
+    if (_canAddReferal) {
+      return _InfoCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(t(context, 'home.referral.title'),
+                style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _referalCtrl,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(
+                labelText: t(context, 'home.referral.id_label'),
+                border: const OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.tag),
+              ),
+              maxLength: 12,
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton.icon(
+                onPressed: _refBusy ? null : _setReferal,
+                icon: _refBusy
+                    ? const SizedBox(
+                  width: 16, height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+                    : const Icon(Icons.link),
+                label: Text(t(context, 'home.referral.attach')),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // ничего не требуется — ничего не рисуем
+    return const SizedBox.shrink();
   }
 }
 
@@ -412,8 +524,7 @@ class _AccountSquareCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: theme.colorScheme.surface,
           borderRadius: BorderRadius.circular(16),
-          boxShadow:
-          highlighted ? kElevationToShadow[3] : kElevationToShadow[1],
+          boxShadow: highlighted ? kElevationToShadow[3] : kElevationToShadow[1],
           border: Border.all(
             color: highlighted
                 ? theme.colorScheme.primary.withOpacity(0.6)
@@ -429,28 +540,24 @@ class _AccountSquareCard extends StatelessWidget {
                   : account.name,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w700),
+              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
             ),
             const Spacer(),
             Text(
               _formatMoney(account.balance, account.currency),
-              style: theme.textTheme.headlineSmall
-                  ?.copyWith(fontWeight: FontWeight.w800),
+              style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 6),
             Row(
               children: [
-                Icon(Icons.account_balance_wallet,
-                    size: 16, color: theme.hintColor),
+                Icon(Icons.account_balance_wallet, size: 16, color: theme.hintColor),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     '${account.currency} · ${t(context, "home.account.id")}: ${account.id}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall
-                        ?.copyWith(color: theme.hintColor),
+                    style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
                   ),
                 ),
               ],
@@ -465,7 +572,8 @@ class _AccountSquareCard extends StatelessWidget {
     final whole = v.truncate();
     final frac = ((v - whole) * 100).round().toString().padLeft(2, '0');
     final wholeStr = _thousandsSep(whole);
-    return '$wholeStr.$frac $currencyCode';
+//    return '$wholeStr.$frac $currencyCode';
+    return '$wholeStr $currencyCode';
   }
 
   static String _thousandsSep(int n) {
@@ -503,9 +611,7 @@ class _Dots extends StatelessWidget {
           height: 6,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(3),
-            color: active
-                ? primary
-                : const Color(0x33000000),
+            color: active ? primary : const Color(0x33000000),
           ),
         );
       }),

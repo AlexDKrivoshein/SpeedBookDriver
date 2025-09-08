@@ -18,7 +18,6 @@ class Translations extends ChangeNotifier {
     _lang = (saved ?? WidgetsBinding.instance.platformDispatcher.locale.languageCode).toLowerCase();
     // грузим prelogin/сетевые на старте (необязательно, но полезно)
     await ApiService.loadPreloginTranslations(lang: _lang);
-    await ApiService.loadTranslations(lang: _lang);
     notifyListeners();
   }
 

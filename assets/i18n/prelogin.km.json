@@ -46,6 +46,13 @@
   "home.verification.verified": "បានផ្ទៀងផ្ទាត់",
   "home.verification.rejected": "បានបដិសេធការផ្ទៀងផ្ទាត់",
   "home.verification.rejected_reason": "ហេតុផល",
+  "home.referral.title": "បន្ថែមអ្នកណែនាំ",
+  "home.referral.id_label": "លេខសម្គាល់អ្នកណែនាំ",
+  "home.referral.attach": "ភ្ជាប់",
+  "home.referral.success": "ភ្ជាប់អ្នកណែនាំបានជោគជ័យ",
+  "home.referral.enter_id": "បញ្ចូលលេខសម្គាល់អ្នកណែនាំ",
+  "home.referral.error": "បរាជ័យក្នុងការភ្ជាប់",
+  "home.referral.current_prefix": "អ្នកណែនាំ",
 
   "common.retry": "ព្យាយាមម្ដងទៀត",
   "common.timeout": "ពេលវេលាអស់ហើយ។ សូមព្យាយាមម្ដងទៀត។",
@@ -53,6 +60,8 @@
   "common.success": "ជោគជ័យ!",
   "common.hide": "លាក់",
   "common.network_error": "បញ្ហាបណ្តាញ។ សូមពិនិត្យការតភ្ជាប់របស់អ្នក។",
+  "common.next": "បន្ត",
+  "common.back": "ថយក្រោយ",
 
   "verification.title": "ការផ្ទៀងផ្ទាត់",
   "verification.open": "ចាប់ផ្តើមការផ្ទៀងផ្ទាត់",

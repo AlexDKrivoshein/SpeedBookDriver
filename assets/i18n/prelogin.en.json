@@ -46,6 +46,13 @@
   "home.verification.verified": "Verified",
   "home.verification.rejected": "Verification rejected",
   "home.verification.rejected_reason": "Reason",
+  "home.referral.title": "Add referral",
+  "home.referral.id_label": "Referral ID",
+  "home.referral.attach": "Attach",
+  "home.referral.success": "Referral attached",
+  "home.referral.enter_id": "Enter referral ID",
+  "home.referral.error": "Failed to attach",
+  "home.referral.current_prefix": "Referral",
 
   "common.retry": "Retry",
   "common.timeout": "Request timed out. Please try again.",
@@ -53,6 +60,9 @@
   "common.success": "Success!",
   "common.hide": "Hide",
   "common.network_error": "Network error. Please check your connection.",
+  "common.next": "Next",
+  "common.back": "Back",
+
 
   "verification.title": "Verification",
   "verification.open": "Start verification",
