@@ -7,6 +7,7 @@ import 'api_service.dart';
 import 'driver_api.dart';
 import 'brand.dart';
 import 'brand_header.dart';
+import 'route_observer.dart';
 import 'verification_page.dart';
 
 String t(BuildContext context, String key) =>
@@ -39,7 +40,8 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+
+class _HomePageState extends State<HomePage> with RouteAware {
   DriverDetails? _details;
   bool _loading = true;
   String? _error;
@@ -72,17 +74,30 @@ class _HomePageState extends State<HomePage> {
     _load();
   }
 
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    precacheImage(_bg, context);
+
+    // подписываемся на события роутера
+    final route = ModalRoute.of(context);
+    if (route is PageRoute) {
+      appRouteObserver.subscribe(this, route);
+    }
+  }
+
   @override
   void dispose() {
+    appRouteObserver.unsubscribe(this);
     _pageController.dispose();
     _referalCtrl.dispose();
     super.dispose();
   }
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    precacheImage(_bg, context);
+  void didPopNext() {
+    _load();
   }
 
   Future<void> _load() async {
@@ -176,7 +191,9 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildBackground(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = Theme
+        .of(context)
+        .brightness == Brightness.dark;
     final opacity = isDark ? _bgOpacityDark : _bgOpacityLight;
 
     return Positioned.fill(
@@ -196,7 +213,8 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildSoftGradient() => Positioned.fill(
+  Widget _buildSoftGradient() =>
+      Positioned.fill(
         child: IgnorePointer(
           child: DecoratedBox(
             decoration: BoxDecoration(
@@ -308,7 +326,7 @@ class _HomePageState extends State<HomePage> {
                                     child: Text(
                                       d.name.isEmpty ? '—' : d.name,
                                       style:
-                                          theme.textTheme.titleMedium?.copyWith(
+                                      theme.textTheme.titleMedium?.copyWith(
                                         fontWeight: FontWeight.w700,
                                       ),
                                       overflow: TextOverflow.ellipsis,
@@ -339,7 +357,8 @@ class _HomePageState extends State<HomePage> {
                                   const Icon(Icons.tag, size: 16),
                                   const SizedBox(width: 6),
                                   Text(
-                                    '${t(context, "home.referral.your_id")}: ${d.id}',
+                                    '${t(context, "home.referral.your_id")}: ${d
+                                        .id}',
                                     style: theme.textTheme.bodyMedium,
                                   ),
                                   IconButton(
@@ -459,7 +478,7 @@ class _HomePageState extends State<HomePage> {
                           ],
 
                           if (status ==
-                                  DriverVerificationStatus.needVerification ||
+                              DriverVerificationStatus.needVerification ||
                               status == DriverVerificationStatus.rejected) ...[
                             const SizedBox(height: 12),
                             SizedBox(
@@ -469,11 +488,8 @@ class _HomePageState extends State<HomePage> {
                                   final res = await Navigator.of(context).push(
                                     MaterialPageRoute(
                                         builder: (_) =>
-                                            const VerificationPage()),
+                                        const VerificationPage()),
                                   );
-                                  if (res == true && mounted) {
-                                    await _load();
-                                  }
                                 },
                                 icon: const Icon(Icons.verified_user),
                                 label: Text(t(context, 'verification.open')),
@@ -501,54 +517,56 @@ class _HomePageState extends State<HomePage> {
                         child: CircularProgressIndicator(),
                       ),
                     )
-                  else if (_txError != null)
-                    _InfoCard(
-                      child: Row(
-                        children: [
-                          const Icon(Icons.error_outline),
-                          const SizedBox(width: 12),
-                          Expanded(child: Text(_txError!)),
-                          const SizedBox(width: 8),
-                          OutlinedButton(
-                            onPressed: _load,
-                            child: Text(t(context, 'common.retry')),
-                          ),
-                        ],
-                      ),
-                    )
-                  else if (_transactions.isEmpty)
-                    _InfoCard(
-                      child: Row(
-                        children: [
-                          const Icon(Icons.receipt_long_outlined),
-                          const SizedBox(width: 12),
-                          Expanded(
-                              child:
-                                  Text(t(context, 'home.transactions.empty'))),
-                        ],
-                      ),
-                    )
                   else
-                    _InfoCard(
-                      child: Column(
-                        children: [
-                          for (int i = 0;
+                    if (_txError != null)
+                      _InfoCard(
+                        child: Row(
+                          children: [
+                            const Icon(Icons.error_outline),
+                            const SizedBox(width: 12),
+                            Expanded(child: Text(_txError!)),
+                            const SizedBox(width: 8),
+                            OutlinedButton(
+                              onPressed: _load,
+                              child: Text(t(context, 'common.retry')),
+                            ),
+                          ],
+                        ),
+                      )
+                    else
+                      if (_transactions.isEmpty)
+                        _InfoCard(
+                          child: Row(
+                            children: [
+                              const Icon(Icons.receipt_long_outlined),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                  child:
+                                  Text(t(context, 'home.transactions.empty'))),
+                            ],
+                          ),
+                        )
+                      else
+                        _InfoCard(
+                          child: Column(
+                            children: [
+                              for (int i = 0;
                               i <
                                   (_transactions.length > 10
                                       ? 10
                                       : _transactions.length);
                               i++) ...[
-                            _TxItem(tx: _transactions[i]),
-                            if (i !=
-                                (_transactions.length > 10
+                                _TxItem(tx: _transactions[i]),
+                                if (i !=
+                                    (_transactions.length > 10
                                         ? 10
                                         : _transactions.length) -
-                                    1)
-                              const Divider(height: 16),
-                          ],
-                        ],
-                      ),
-                    ),
+                                        1)
+                                  const Divider(height: 16),
+                              ],
+                            ],
+                          ),
+                        ),
 
                   const SizedBox(height: 12),
                   // … другие секции
@@ -581,8 +599,12 @@ class _HomePageState extends State<HomePage> {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                '${t(context, "home.referral.current_prefix")}: ${_referalName!}',
-                style: Theme.of(context).textTheme.titleMedium,
+                '${t(context,
+                    "home.referral.current_prefix")}: ${_referalName!}',
+                style: Theme
+                    .of(context)
+                    .textTheme
+                    .titleMedium,
               ),
             ),
           ],
@@ -597,7 +619,10 @@ class _HomePageState extends State<HomePage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(t(context, 'home.referral.title'),
-                style: Theme.of(context).textTheme.titleMedium),
+                style: Theme
+                    .of(context)
+                    .textTheme
+                    .titleMedium),
             const SizedBox(height: 8),
             TextField(
               controller: _referalCtrl,
@@ -616,10 +641,10 @@ class _HomePageState extends State<HomePage> {
                 onPressed: _refBusy ? null : _setReferal,
                 icon: _refBusy
                     ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
                     : const Icon(Icons.link),
                 label: Text(t(context, 'home.referral.attach')),
               ),
@@ -734,7 +759,7 @@ class _AccountSquareCard extends StatelessWidget {
           color: theme.colorScheme.surface,
           borderRadius: BorderRadius.circular(14),
           boxShadow:
-              highlighted ? kElevationToShadow[3] : kElevationToShadow[1],
+          highlighted ? kElevationToShadow[3] : kElevationToShadow[1],
           border: Border.all(
             color: highlighted
                 ? theme.colorScheme.primary.withOpacity(0.6)
@@ -747,7 +772,7 @@ class _AccountSquareCard extends StatelessWidget {
             Text(
               account.name.isEmpty
                   ? ApiService.getTranslationForWidget(
-                      context, 'home.account.default_name')
+                  context, 'home.account.default_name')
                   : account.name,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
@@ -803,7 +828,11 @@ class _AccountSquareCard extends StatelessWidget {
         count = 0;
       }
     }
-    return buf.toString().split('').reversed.join();
+    return buf
+        .toString()
+        .split('')
+        .reversed
+        .join();
   }
 }
 
@@ -815,7 +844,10 @@ class _Dots extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final primary = Theme.of(context).colorScheme.primary;
+    final primary = Theme
+        .of(context)
+        .colorScheme
+        .primary;
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: List.generate(count, (i) {
@@ -844,7 +876,8 @@ class _TxItem extends StatelessWidget {
   String _two(int n) => n.toString().padLeft(2, '0');
 
   String _fmtDate(DateTime d) =>
-      '${_two(d.day)}.${_two(d.month)}.${d.year} ${_two(d.hour)}:${_two(d.minute)}';
+      '${_two(d.day)}.${_two(d.month)}.${d.year} ${_two(d.hour)}:${_two(
+          d.minute)}';
 
   String _formatMoney(double v, String currency) {
     final sign = v >= 0 ? '' : '-';
@@ -869,7 +902,11 @@ class _TxItem extends StatelessWidget {
         cnt = 0;
       }
     }
-    return b.toString().split('').reversed.join();
+    return b
+        .toString()
+        .split('')
+        .reversed
+        .join();
   }
 
   IconData _icon(String t) {
@@ -900,7 +937,7 @@ class _TxItem extends StatelessWidget {
             borderRadius: BorderRadius.circular(8),
           ),
           child:
-              Icon(_icon(tx.type), size: 20, color: theme.colorScheme.primary),
+          Icon(_icon(tx.type), size: 20, color: theme.colorScheme.primary),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -929,7 +966,7 @@ class _TxItem extends StatelessWidget {
               Text(
                 _fmtDate(tx.date),
                 style:
-                    theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
+                theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
               ),
             ],
           ),
@@ -948,7 +985,7 @@ class _TxItem extends StatelessWidget {
               Text(
                 '- ${_formatMoney(tx.commission, tx.currency)}',
                 style:
-                    theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
+                theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
               ),
           ],
         ),

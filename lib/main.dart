@@ -9,6 +9,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 
+import 'route_observer.dart';
 import 'api_service.dart';
 import 'home_page.dart';
 import 'phone_input_page.dart';
@@ -67,6 +68,7 @@ class MyApp extends StatelessWidget {
               navigatorKey: navigatorKey,
               title: 'SpeedBook taxi driver',
               debugShowCheckedModeBanner: false,
+              navigatorObservers: [appRouteObserver],
               theme: ThemeData(
                 useMaterial3: true,
                 colorSchemeSeed: Colors.blue,
