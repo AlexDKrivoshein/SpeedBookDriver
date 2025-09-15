@@ -1,0 +1,4 @@
+<resources>
+  <string name="branch_key">key_live_xxxxxxxxx</string>
+  <string name="branch_key_test">key_test_xxxxxxxxx</string>
+</resources>
