@@ -1,5 +1,4 @@
-// lib/main.dart
-import 'dart:ui' as ui;
+import 'dart:ui' as ui; // можно убрать, если не используешь где-то ещё
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -9,9 +8,12 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 
+// + Branch
+import 'package:flutter_branch_sdk/flutter_branch_sdk.dart';
+
 import 'route_observer.dart';
 import 'api_service.dart';
-import 'home_page.dart';
+import 'features/home/home_page.dart';
 import 'phone_input_page.dart';
 import 'location_service.dart';
 import 'permission_helper.dart';
@@ -20,16 +22,54 @@ import 'translations.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
+Future<void> _initBranchDeepLinking() async {
+  // Инициализация Branch
+  await FlutterBranchSdk.init(
+    enableLogging: kDebugMode,
+    disableTracking: false,
+  );
+
+  if (kDebugMode) {
+    FlutterBranchSdk.validateSDKIntegration();
+  }
+
+  // Слушаем диплинки
+  FlutterBranchSdk.listSession().listen((data) async {
+    try {
+      final map = Map<String, dynamic>.from(data);
+      final inviter = (map['inviter_id'] ?? map['ref'])?.toString();
+      final linkId  = map['~id']?.toString();
+
+      if (inviter != null && inviter.isNotEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('referral.pending_inviter_id', inviter);
+        if (linkId != null && linkId.isNotEmpty) {
+          await prefs.setString('referral.branch_link_id', linkId);
+        }
+        await prefs.setString('referral.source', 'branch');
+        debugPrint('[Branch] saved inviter=$inviter linkId=$linkId');
+      } else {
+        debugPrint('[Branch] no inviter in params: $map');
+      }
+    } catch (e) {
+      debugPrint('[Branch] listSession parse error: $e');
+    }
+  }, onError: (e) {
+    debugPrint('[Branch] listSession error: $e');
+  });
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await ApiService.loadPreloginTranslations();
 
+  await ApiService.loadPreloginTranslations();
   await Firebase.initializeApp();
 
   final opts = Firebase.app().options;
   debugPrint(
       'FB project: ${opts.projectId} appId: ${opts.appId} apiKey: ${opts.apiKey}');
 
+  // App Check
   if (kDebugMode) {
     await FirebaseAppCheck.instance.activate(
       androidProvider: AndroidProvider.debug,
@@ -43,6 +83,9 @@ Future<void> main() async {
       appleProvider: AppleProvider.deviceCheck,
     );
   }
+
+  // Branch deep links
+  await _initBranchDeepLinking();
 
   // Глобальная реакция на невалидную backend-сессию
   ApiService.setOnAuthFailed(() {
@@ -146,7 +189,7 @@ class _RootState extends State<_Root> {
     // Release → авто язык и страна
     final prefs = await SharedPreferences.getInstance();
     final systemLocale = WidgetsBinding.instance.platformDispatcher.locale;
-    final sysLang = (systemLocale.languageCode ?? 'en').toLowerCase();
+    final sysLang = (systemLocale.languageCode).toLowerCase();
     const allowed = {'en', 'ru', 'km'};
     final lang = allowed.contains(sysLang) ? sysLang : 'en';
 
@@ -201,9 +244,9 @@ class _RootState extends State<_Root> {
           final userLang = savedLang.isNotEmpty
               ? savedLang
               : (profile['lang'] as String?)?.toLowerCase() ??
-              ui.window.locale.languageCode.toLowerCase();
+              WidgetsBinding.instance.platformDispatcher.locale.languageCode.toLowerCase();
 
-          //await ApiService.loadTranslations(lang: userLang);
+          // await ApiService.loadTranslations(lang: userLang);
           if (mounted) {
             await context.read<Translations>().setLang(userLang);
             setState(() {
@@ -219,9 +262,9 @@ class _RootState extends State<_Root> {
         final savedLang = (prefs.getString('user_lang') ?? '').toLowerCase();
         final guestLang = savedLang.isNotEmpty
             ? savedLang
-            : ui.window.locale.languageCode.toLowerCase();
+            : WidgetsBinding.instance.platformDispatcher.locale.languageCode.toLowerCase();
 
-        //await ApiService.loadTranslations(lang: guestLang);
+        // await ApiService.loadTranslations(lang: guestLang);
         if (mounted) {
           await context.read<Translations>().setLang(guestLang);
           setState(() {

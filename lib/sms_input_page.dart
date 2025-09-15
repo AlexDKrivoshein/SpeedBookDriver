@@ -276,6 +276,10 @@ class _SmsInputPageState extends State<SmsInputPage>
       final platform =
       Platform.isAndroid ? 'android' : (Platform.isIOS ? 'ios' : 'unknown');
 
+      final pendingInviter = prefs.getString('referral.pending_inviter_id');
+      final branchLinkId   = prefs.getString('referral.branch_link_id'); // если ты сохраняешь из Branch.initSession()
+      final referralSource = prefs.getString('referral.source') ?? 'branch'; // branch/manual/adjust/qr...
+
       final urlStr = '${_apiUrl!}/api/auth_driver';
       final response = await http
           .post(
@@ -295,6 +299,9 @@ class _SmsInputPageState extends State<SmsInputPage>
           'fcm_token': fcmToken,
           'is_driver': true,
           'region': userCountry,
+          'inviter_id'    : pendingInviter,
+          if (branchLinkId != null) 'link_id': branchLinkId,
+          'source'        : referralSource,
         }),
       )
           .timeout(const Duration(seconds: 15));
@@ -328,6 +335,12 @@ class _SmsInputPageState extends State<SmsInputPage>
       final token  = json['data']?['token'];
       final secret = json['data']?['secret'];
       debugPrint('[SMSInput] token: $token, secret: ${secret is String ? "***" : secret}');
+
+      // если был реферал — считаем, что бэкенд его обработал, чистим pending
+      final hadReferral = prefs.getString('referral.pending_inviter_id');
+      if (hadReferral != null && hadReferral.isNotEmpty) {
+        await prefs.remove('referral.pending_inviter_id');
+      }
 
       if (token is String && token.isNotEmpty && secret is String && secret.isNotEmpty) {
         await prefs.setString('secret', secret);

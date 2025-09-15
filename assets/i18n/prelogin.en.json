@@ -42,9 +42,9 @@
   "home.account.id": "id",
   "home.verification.title": "Verification status",
   "home.verification.need": "Verification required",
-  "home.verification.pending": "Documents are being checked",
+  "home.verification.pending": "Under review",
   "home.verification.verified": "Verified",
-  "home.verification.rejected": "Verification rejected",
+  "home.verification.rejected": "Rejected",
   "home.verification.rejected_reason": "Reason",
   "home.referral.title": "Add referral",
   "home.referral.id_label": "Referral ID",
@@ -55,9 +55,33 @@
   "home.referral.current_prefix": "Referred by",
   "home.referral.your_id": "Referral ID",
 
+  "home.car.title": "Vehicle",
+  "home.car.add": "Add car",
+  "home.car.number": "Number",
+  "home.car.brand": "Brand",
+  "home.car.model": "Model",
+  "home.car.book_rental": "Book rental car",
+
+  "home.vehicle.type": "Vehicle type",
+  "home.vehicle.brand": "Brand",
+  "home.vehicle.model": "Model",
+  "home.vehicle.color": "Color",
+  "home.vehicle.number": "Car number",
+  "home.vehicle.year": "Year",
+  "home.vehicle.docs": "Vehicle documents",
+  "home.vehicle.docs.add_photos": "Add from gallery",
+  "home.vehicle.docs.take_photo": "Take photo",
+  "home.vehicle.docs.hint": "Upload registration, insurance and other car documents",
+  "home.vehicle.docs.add": "Add document",
+  "home.vehicle.docs.take": "Take photo of document",
+  "home.vehicle.docs.required": "Please upload a vehicle document photo",
+
   "home.transactions.title": "Recent transactions",
   "home.transactions.empty": "No transactions yet",
 
+  "common.fill_all_required": "Please fill all required fields",
+  "common.save": "Save",
+  "common.saved": "Saved",
   "common.copy": "Copy",
   "common.copied": "Copied",
 
@@ -97,5 +121,19 @@
   "verification.doc.hint.valid": "Documents must be original and valid",
   "verification.photo.empty": "No photo yet",
   "verification.photo.take": "Take photo",
-  "verification.photo.retake": "Retake"
+  "verification.photo.retake": "Retake",
+
+  "home.referral.invite_btn": "Invite via link",
+  "referral.title": "Invite a friend",
+  "referral.subtitle": "Share a link or QR — both of you get a bonus",
+  "referral.generating": "Generating link…",
+  "referral.your_code": "Your code:",
+  "referral.copy_code": "Copy code",
+
+  "referral.copy_link": "Copy link",
+  "referral.qr_title": "Invite QR",
+  "referral.share": "Share",
+  "referral.copied": "Link copied",
+  "referral.error": "Failed to create the link",
+  "referral.share_text": "Join me in SpeedBook: {link}"
 }

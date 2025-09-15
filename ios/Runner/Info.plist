@@ -70,5 +70,16 @@
 		<true/>
 		<key>UIViewControllerBasedStatusBarAppearance</key>
 		<false/>
+		<key>branch_key</key>
+		<dict>
+		      <key>live</key><string>key_live_xxxxxxxxx</string>
+		      <key>test</key><string>key_test_xxxxxxxxx</string>
+		</dict>
+		<key>branch_app_domain</key><string>yourapp.app.link</string>
+		<key>branch_universal_link_domains</key>
+		<array>
+		      <string>yourapp.app.link</string>
+		      <string>yourapp-alternate.app.link</string>
+		</array>
 	</dict>
 </plist>

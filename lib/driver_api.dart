@@ -1,6 +1,7 @@
 // lib/driver_api.dart
 import 'package:flutter/foundation.dart';
 import 'api_service.dart';
+import 'dart:convert';
 
 class DriverAccount {
   final String name;
@@ -33,6 +34,13 @@ class DriverDetails {
   final String? rejectionReason;
   final String? referal;
   final bool canAddReferal;
+  final int? carId;     // id машины
+  final String? number; // номерной знак
+  final String? brand;  // марка
+  final String? model;  // модель
+  final String? carClass;
+  final String? carReason;
+
 
   DriverDetails({
     required this.id,
@@ -43,6 +51,12 @@ class DriverDetails {
     this.rejectionReason,
     required this.referal,
     this.canAddReferal = false,
+    this.carId,
+    this.number,
+    this.brand,
+    this.model,
+    this.carClass,
+    this.carReason,
   });
 
   factory DriverDetails.fromJson(Map<String, dynamic> json) {
@@ -65,6 +79,12 @@ class DriverDetails {
       rejectionReason: root['reason']?.toString(),
       referal: root['referal']?.toString(),
       canAddReferal: root['can_add_referal'] == true,
+      carId: root['car_id'],
+      number: root['number'],
+      brand: root['brand'],
+      model: root['model'],
+      carClass: root['car_class'],
+      carReason: root['car_reason'],
     );
   }
 }
@@ -139,6 +159,85 @@ class DriverTransaction {
     'description': description,
     'commission': commission,
     'total': total,
+  };
+}
+
+class CarModel {
+  final int id;
+  final String name;
+  CarModel({required this.id, required this.name});
+  factory CarModel.fromJson(Map<String, dynamic> j) =>
+      CarModel(id: (j['id'] as num).toInt(), name: (j['name'] ?? '').toString());
+}
+
+class CarBrand {
+  final int id;
+  final String name;
+  final List<CarModel> models;
+  CarBrand({required this.id, required this.name, required this.models});
+  factory CarBrand.fromJson(Map<String, dynamic> j) {
+    final ms = (j['models'] is List)
+        ? (j['models'] as List).whereType<Map<String, dynamic>>().map(CarModel.fromJson).toList()
+        : <CarModel>[];
+    return CarBrand(
+      id: (j['id'] as num).toInt(),
+      name: (j['name'] ?? '').toString(),
+      models: ms,
+    );
+  }
+}
+
+class CarType {
+  final int id;
+  final String name;
+  final List<CarBrand> brands;
+  CarType({required this.id, required this.name, required this.brands});
+  factory CarType.fromJson(Map<String, dynamic> j) {
+    final bs = (j['brands'] is List)
+        ? (j['brands'] as List).whereType<Map<String, dynamic>>().map(CarBrand.fromJson).toList()
+        : <CarBrand>[];
+    return CarType(
+      id: (j['id'] as num).toInt(),
+      name: (j['name'] ?? '').toString(),
+      brands: bs,
+    );
+  }
+}
+
+class CarColor {
+  final String hex;
+  final String name;
+  CarColor({required this.hex, required this.name});
+  factory CarColor.fromJson(Map<String, dynamic> j) =>
+      CarColor(hex: (j['hex'] ?? '#000000').toString(), name: (j['name'] ?? '').toString());
+}
+
+class VerificationPreData {
+  final List<CarType> cars;
+  final List<CarColor> colors;
+  VerificationPreData({required this.cars, required this.colors});
+  factory VerificationPreData.fromJson(Map<String, dynamic> json) {
+    final root = (json['data'] is Map<String, dynamic>) ? json['data'] : json;
+    final types = (root['cars'] is List)
+        ? (root['cars'] as List).whereType<Map<String, dynamic>>().map(CarType.fromJson).toList()
+        : <CarType>[];
+    final cols = (root['colors'] is List)
+        ? (root['colors'] as List).whereType<Map<String, dynamic>>().map(CarColor.fromJson).toList()
+        : <CarColor>[];
+    return VerificationPreData(cars: types, colors: cols);
+  }
+}
+
+class CarDocUpload {
+  final String filename;
+  final String base64; // содержимое файла в base64
+  final String mime;   // 'image/jpeg'/'image/png'
+  CarDocUpload({required this.filename, required this.base64, required this.mime});
+
+  Map<String, dynamic> toJson() => {
+    'filename': filename,
+    'content_base64': base64,
+    'mime': mime,
   };
 }
 
@@ -249,4 +348,40 @@ class DriverApi {
 
     return list.map((e) => DriverTransaction.fromJson(e)).toList();
   }
+
+  /// Возвращает lookup-данные для формы (vehicle types/brands/models/colors)
+  static Future<VerificationPreData> getVerificationPreData() async {
+    final res = await ApiService.callAndDecode('get_verification_pre_data', {})
+        .timeout(const Duration(seconds: 120));
+    return VerificationPreData.fromJson(res);
+  }
+
+  static Future<Map<String, dynamic>> submitCarVerification({
+    required int vehicleTypeId,
+    required int brandId,
+    required int modelId,
+    required String colorHex,
+    required String number,
+    required int year,
+    required Uint8List carDocFile, // один обязательный файл
+  }) async {
+    String b64(Uint8List f) => base64Encode(f);
+
+    final payload = {
+      'vehicle_type_id': vehicleTypeId,
+      'brand_id': brandId,
+      'model_id': modelId,
+      'color_hex': colorHex,
+      'number': number,
+      'year': year,
+      'docs': {
+        'car_doc': b64(carDocFile),
+      },
+    };
+
+    final res = await ApiService.callAndDecode('submit_car_verification', payload)
+        .timeout(const Duration(seconds: 30));
+    return (res is Map<String, dynamic>) ? res : <String, dynamic>{'status': 'ERROR'};
+  }
 }
+

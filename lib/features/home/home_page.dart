@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
 import '../../api_service.dart';
 import '../../driver_api.dart';
 import '../../brand.dart';
@@ -7,14 +9,20 @@ import '../../brand_header.dart';
 import '../../route_observer.dart';
 import '../../verification_page.dart';
 
+// экран добавления авто
+import 'add_car_page.dart';
+
 import 'widgets/background.dart';
 import 'widgets/info_card.dart';
 import 'widgets/verification_badge.dart';
-import 'widgets/referral_card.dart';
+import 'widgets/referral_card.dart';      // панель привязки к рефералу (ввод кода)
 import 'widgets/car_section.dart';
 import 'widgets/accounts_carousel.dart';
 import 'widgets/dots.dart';
 import 'widgets/transactions_section.dart';
+
+// шарящий ReferralCard (Branch/QR) — отдельный виджет
+import '../referral/referral_card.dart' as Share;
 
 String t(BuildContext context, String key) =>
     ApiService.getTranslationForWidget(context, key);
@@ -187,16 +195,43 @@ class _HomePageState extends State<HomePage> with RouteAware {
   }
 
   Future<void> _onAddCar() async {
-    try {
-      await Navigator.of(context).pushNamed('/add_car');
+    final res = await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const AddCarPage()),
+    );
+    if (res == true) {
       await _load();
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(t(context, 'home.car.add'))),
-        );
-      }
     }
+  }
+
+  void _onBookRental() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Not implemented yet')),
+    );
+  }
+
+  // Открыть модалку с «шарящим» ReferralCard (Branch/QR)
+  void _openShareReferral() {
+    final d = _details;
+    if (d == null) return;
+    showModalBottomSheet<void>(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          child: Share.ReferralCard(
+            inviterId: '${d.id}',
+            campaign: 'driver_invite',
+            channel: 'referral',
+          ),
+        );
+      },
+    );
   }
 
   static String _initials(String s) {
@@ -347,7 +382,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
                   ),
                   const SizedBox(height: 12),
 
-                  // Referral — ПЕРЕД аккаунтами
+                  // Referral — ПЕРЕД аккаунтами (панель привязки)
                   ReferralCard(
                     referalName: _referalName,
                     canAddReferal: _canAddReferal,
@@ -355,15 +390,29 @@ class _HomePageState extends State<HomePage> with RouteAware {
                     busy: _refBusy,
                     onAttach: _setReferal,
                   ),
+                  const SizedBox(height: 8),
+
+                  // Кнопка открытия «шарящего» ReferralCard (Branch/QR)
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _openShareReferral,
+                      icon: const Icon(Icons.ios_share),
+                      label: Text(t(context, 'home.referral.invite_btn')),
+                    ),
+                  ),
                   const SizedBox(height: 12),
 
-                  // Car (новое) — ПЕРЕД аккаунтами
+                  // Car — ПЕРЕД аккаунтами
                   CarSection(
                     hasCar: d.carId != null,
                     number: d.number,
                     brand: d.brand,
                     model: d.model,
+                    carClass: d.carClass,      // NOCAR | AWAITING | REJECTED
+                    carReason: d.carReason,    // причина (если REJECTED)
                     onAddCar: _onAddCar,
+                    onBookRental: _onBookRental,
                     t: (k) => t(context, k),
                   ),
                   const SizedBox(height: 12),
@@ -387,7 +436,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
                   ],
                   const SizedBox(height: 12),
 
-                  // Verification
+                  // Verification (водителя)
                   if (status != DriverVerificationStatus.verified) ...[
                     InfoCard(
                       child: Column(

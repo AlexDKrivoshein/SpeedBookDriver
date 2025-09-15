@@ -54,11 +54,35 @@
   "home.referral.error": "បរាជ័យក្នុងការភ្ជាប់",
   "home.referral.current_prefix": "បានណែនាំដោយ",
   "home.referral.your_id": "លេខអ្នកណែនាំ",
+
+  "home.car.title": "យានយន្ត",
+  "home.car.add": "បន្ថែមយានយន្ត",
+  "home.car.number": "លេខ",
+  "home.car.brand": "ម៉ាក",
+  "home.car.model": "ម៉ូដែល",
+  "home.car.book_rental": "ជួលរថយន្ត",
+  "home.vehicle.type": "ប្រភេទយានយន្ត",
+  "home.vehicle.brand": "ម៉ាក",
+  "home.vehicle.model": "ម៉ូដែល",
+  "home.vehicle.color": "ពណ៌",
+  "home.vehicle.number": "លេខយានយន្ត",
+  "home.vehicle.year": "ឆ្នាំផលិត",
+  "home.vehicle.docs.add_photos": "បន្ថែមពីវិចិត្រសាល",
+  "home.vehicle.docs.take_photo": "ថតរូប",
+  "home.vehicle.docs.hint": "បញ្ចូលឯកសារចុះបញ្ជី គំរោងធានារ៉ាប់រង និងឯកសារផ្សេងៗ",
+  "home.vehicle.docs": "ឯកសាររថយន្ត",
+  "home.vehicle.docs.add": "បន្ថែមឯកសារ",
+  "home.vehicle.docs.take": "ថតរូបឯកសាររថយន្ត",
+  "home.vehicle.docs.required": "សូមផ្ទុករូបថតឯកសាររថយន្ត",
+
   "home.transactions.title": "ប្រតិបត្តិការចុងក្រោយ",
   "home.transactions.empty": "មិនទាន់មានប្រតិបត្តិការទេ",
 
   "common.copy": "ចម្លង",
   "common.copied": "បានចម្លង",
+  "common.fill_all_required": "សូមបញ្ចូលព័ត៌មានទាំងអស់ដែលត្រូវការ",
+  "common.save": "រក្សាទុក",
+  "common.saved": "បានរក្សាទុក",
 
   "common.retry": "ព្យាយាមម្ដងទៀត",
   "common.timeout": "ពេលវេលាអស់ហើយ។ សូមព្យាយាមម្ដងទៀត។",
@@ -96,5 +120,19 @@
   "verification.doc.hint.valid": "ឯកសារត្រូវតែជាដើម និងមានសុពលភាព",
   "verification.photo.empty": "មិនទាន់មានរូបថត",
   "verification.photo.take": "ថតរូប",
-  "verification.photo.retake": "ថតម្ដងទៀត"
+  "verification.photo.retake": "ថតម្ដងទៀត",
+
+  "home.referral.invite_btn": "Invite via link",
+  "referral.title": "Invite a friend",
+  "referral.subtitle": "Share a link or QR — both of you get a bonus",
+  "referral.generating": "Generating link…",
+  "referral.your_code": "Your code:",
+  "referral.copy_code": "Copy code",
+
+  "referral.copy_link": "Copy link",
+  "referral.qr_title": "Invite QR",
+  "referral.share": "Share",
+  "referral.copied": "Link copied",
+  "referral.error": "Failed to create the link",
+  "referral.share_text": "Join me in SpeedBook: {link}"
 }

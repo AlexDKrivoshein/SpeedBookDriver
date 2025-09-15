@@ -1,34 +1,34 @@
+// lib/features/referral/referral_card.dart
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_branch_sdk/flutter_branch_sdk.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../brand.dart'; // Brand.yellow, Brand.black и т.п.
-import '../../api_service.dart'; // для t(context, key), если используешь
-// Если у тебя helper t() уже определён отдельно — используй его.
-// Ниже для совместимости:
+import '../../brand.dart';
+import '../../api_service.dart';
+
+// короткий алиас для переводов
 String t(BuildContext context, String key) =>
     ApiService.getTranslationForWidget(context, key);
 
-/// Карточка рефералов:
-/// - Генерит “умную” короткую ссылку через Branch (deferred deep link)
-/// - Кэширует ссылку для текущего inviterId
-/// - Кнопки: Поделиться, Скопировать, Показать QR
-/// - Лёгкая тема оформления под SpeedBook
+/// ReferralCard — карточка «Пригласить друга»
+/// генерирует умную ссылку Branch (deferred deep link),
+/// показывает её, даёт «Поделиться», «Скопировать», «QR».
 class ReferralCard extends StatefulWidget {
-  /// Уникальный идентификатор пригласившего (uid водителя / код)
+  /// Уникальный код/UID пригласившего (текущий водитель)
   final String inviterId;
 
-  /// Необязательный статичный title и subtitle (иначе возьмём из t())
+  /// Кастомный заголовок/подзаголовок (если не указать — берутся из переводов)
   final String? title;
   final String? subtitle;
 
-  /// Опционально: кастомизация кампании / канала
-  final String campaign; // например: driver_invite / passenger_invite
-  final String channel;  // например: referral
+  /// Маркировка ссылки для аналитики
+  final String campaign; // driver_invite / passenger_invite / ...
+  final String channel;  // referral / promo / ...
 
   const ReferralCard({
     super.key,
@@ -44,37 +44,38 @@ class ReferralCard extends StatefulWidget {
 }
 
 class _ReferralCardState extends State<ReferralCard> {
-  Uri? _refLink;
+  Uri? _link;
   bool _loading = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    _loadOrCreateLink();
+    _prepare();
   }
 
-  Future<void> _loadOrCreateLink() async {
+  Future<void> _prepare() async {
     setState(() {
       _loading = true;
       _error = null;
     });
-
     try {
-      final link = await _getCachedOrCreateBranchLink(
+      final link = await _getCachedOrCreateLink(
         inviterId: widget.inviterId,
         campaign: widget.campaign,
         channel: widget.channel,
       );
-      if (mounted) setState(() => _refLink = link);
+      if (!mounted) return;
+      setState(() => _link = link);
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+      if (!mounted) return;
+      setState(() => _error = e.toString());
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  Future<Uri> _getCachedOrCreateBranchLink({
+  Future<Uri> _getCachedOrCreateLink({
     required String inviterId,
     required String campaign,
     required String channel,
@@ -86,7 +87,7 @@ class _ReferralCardState extends State<ReferralCard> {
       return Uri.parse(cached);
     }
 
-    // 1) Описываем контент для Branch (передаём inviter_id/ref)
+    // Описание контента для Branch
     final buo = BranchUniversalObject(
       canonicalIdentifier: 'ref/$inviterId',
       title: 'SpeedBook Invite',
@@ -96,53 +97,53 @@ class _ReferralCardState extends State<ReferralCard> {
         ..addCustomMetadata('ref', inviterId),
     );
 
-    // 2) Свойства ссылки (канал/фича/кампания + фолыбэки)
+    // Свойства ссылки
     final lp = BranchLinkProperties(
       channel: channel,
       feature: 'invite',
       campaign: campaign,
     )
-    // Фолыбэк-URLы (если нет приложения/магазин недоступен):
-      ..addControlParam('\$desktop_url', 'https://speed-booking.com/invite/$inviterId')
-      ..addControlParam('\$android_url', 'https://speed-booking.com/invite/$inviterId')
-      ..addControlParam('\$ios_url',     'https://speed-booking.com/invite/$inviterId');
+    // Фолбэки (страница с объяснением, если магазины недоступны)
+      ..addControlParam(r'$desktop_url', 'https://speed-booking.com/invite/$inviterId')
+      ..addControlParam(r'$android_url', 'https://speed-booking.com/invite/$inviterId')
+      ..addControlParam(r'$ios_url', 'https://speed-booking.com/invite/$inviterId');
 
-    final result = await FlutterBranchSdk.getShortUrl(
+    final res = await FlutterBranchSdk.getShortUrl(
       buo: buo,
       linkProperties: lp,
     );
 
-    if (!result.success) {
-      // Фоллбэк: отдадим наш веб-URL, но сообщим об ошибке — чтобы ты увидел в логах
-      debugPrint('[Referral] Branch error: ${result.errorMessage}');
+    if (!res.success) {
+      // Фолбэк: вернём наш веб-адрес, чтобы пользователь всё равно мог делиться
+      debugPrint('[Referral] Branch error: ${res.errorMessage}');
       final fallback = Uri.parse('https://speed-booking.com/invite/$inviterId');
       await prefs.setString(cacheKey, fallback.toString());
       return fallback;
     }
 
-    final url = Uri.parse(result.result);
+    final url = Uri.parse(res.result);
     await prefs.setString(cacheKey, url.toString());
     return url;
   }
 
   Future<void> _copyLink() async {
-    if (_refLink == null) return;
-    await Clipboard.setData(ClipboardData(text: _refLink.toString()));
+    if (_link == null) return;
+    await Clipboard.setData(ClipboardData(text: _link.toString()));
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(t(context, 'referral.copied'))),
     );
   }
 
-  Future<void> _share() async {
-    if (_refLink == null) return;
-    final text = t(context, 'referral.share_text')
-        .replaceAll('{link}', _refLink.toString());
+  Future<void> _shareLink() async {
+    if (_link == null) return;
+    final text =
+    t(context, 'referral.share_text').replaceAll('{link}', _link.toString());
     await Share.share(text);
   }
 
   void _showQr() {
-    if (_refLink == null) return;
+    if (_link == null) return;
     showModalBottomSheet<void>(
       context: context,
       useSafeArea: true,
@@ -152,7 +153,7 @@ class _ReferralCardState extends State<ReferralCard> {
       ),
       builder: (ctx) {
         return Padding(
-          padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 28),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -163,33 +164,31 @@ class _ReferralCardState extends State<ReferralCard> {
                 ),
               ),
               const SizedBox(height: 16),
-              Center(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: const [
-                      BoxShadow(
-                        blurRadius: 16,
-                        offset: Offset(0, 6),
-                        color: Color(0x22000000),
-                      ),
-                    ],
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: QrImageView(
-                      data: _refLink.toString(),
-                      version: QrVersions.auto,
-                      size: 240,
-                      gapless: true,
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: const [
+                    BoxShadow(
+                      blurRadius: 16,
+                      offset: Offset(0, 6),
+                      color: Color(0x22000000),
                     ),
+                  ],
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: QrImageView(
+                    data: _link.toString(),
+                    version: QrVersions.auto,
+                    size: 240,
+                    gapless: true,
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               Text(
-                _refLink.toString(),
+                _link.toString(),
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Colors.black54,
@@ -197,8 +196,9 @@ class _ReferralCardState extends State<ReferralCard> {
               ),
               const SizedBox(height: 8),
               FilledButton(
-                onPressed: () {
-                  Clipboard.setData(ClipboardData(text: _refLink.toString()));
+                onPressed: () async {
+                  await Clipboard.setData(ClipboardData(text: _link.toString()));
+                  if (!mounted) return;
                   Navigator.pop(ctx);
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text(t(context, 'referral.copied'))),
@@ -215,17 +215,17 @@ class _ReferralCardState extends State<ReferralCard> {
 
   @override
   Widget build(BuildContext context) {
-    final title = widget.title ?? t(context, 'referral.title'); // «Пригласить друга» и т.п.
-    final subtitle = widget.subtitle ??
-        t(context, 'referral.subtitle'); // «Дай ссылку — получите бонусы»
+    final theme = Theme.of(context);
+    final title = widget.title ?? t(context, 'referral.title');
+    final subtitle = widget.subtitle ?? t(context, 'referral.subtitle');
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Brand.yellow.withOpacity(0.1),
+        color: Brand.yellow.withOpacity(0.10),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Brand.yellow.withOpacity(0.5), width: 1),
+        border: Border.all(color: Brand.yellow.withOpacity(0.45), width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -246,7 +246,7 @@ class _ReferralCardState extends State<ReferralCard> {
               Expanded(
                 child: Text(
                   title,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -256,13 +256,13 @@ class _ReferralCardState extends State<ReferralCard> {
           const SizedBox(height: 6),
           Text(
             subtitle,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Colors.black.withOpacity(0.7),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: Colors.black.withOpacity(0.72),
             ),
           ),
           const SizedBox(height: 12),
 
-          // Состояния: загрузка / ошибка / ссылка
+          // Состояния
           if (_loading)
             Row(
               children: [
@@ -277,58 +277,62 @@ class _ReferralCardState extends State<ReferralCard> {
             )
           else if (_error != null)
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Icon(Icons.error_outline, color: Colors.red),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    t(context, 'referral.error') + ': ${_error!}',
+                    '${t(context, 'referral.error')}: $_error',
                     style: const TextStyle(color: Colors.red),
                   ),
                 ),
                 const SizedBox(width: 8),
                 TextButton(
-                  onPressed: _loadOrCreateLink,
+                  onPressed: _prepare,
                   child: Text(t(context, 'common.retry')),
                 ),
               ],
             )
-          else if (_refLink != null)
+          else if (_link != null)
               _LinkRow(
-                link: _refLink!,
+                link: _link!,
+                onShare: _shareLink,
                 onCopy: _copyLink,
-                onShare: _share,
                 onQr: _showQr,
               ),
 
-          const SizedBox(height: 8),
-          // Код пригласившего (для человека)
+          const SizedBox(height: 10),
+
+          // Ваш код (для человека)
           Row(
             children: [
               Text(
                 t(context, 'referral.your_code'),
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                style: theme.textTheme.bodyMedium?.copyWith(
                   color: Colors.black.withOpacity(0.6),
                 ),
               ),
               const SizedBox(width: 6),
               SelectableText(
                 widget.inviterId,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                style: theme.textTheme.bodyMedium?.copyWith(
                   fontFamily: 'monospace',
                   fontWeight: FontWeight.w700,
                 ),
               ),
               const Spacer(),
-              TextButton(
+              TextButton.icon(
                 onPressed: () async {
-                  await Clipboard.setData(ClipboardData(text: widget.inviterId));
+                  await Clipboard.setData(
+                      ClipboardData(text: widget.inviterId));
                   if (!mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text(t(context, 'referral.code_copied'))),
                   );
                 },
-                child: Text(t(context, 'referral.copy_code')),
+                icon: const Icon(Icons.copy, size: 18),
+                label: Text(t(context, 'referral.copy_code')),
               ),
             ],
           ),
@@ -340,20 +344,20 @@ class _ReferralCardState extends State<ReferralCard> {
 
 class _LinkRow extends StatelessWidget {
   final Uri link;
-  final VoidCallback onCopy;
   final VoidCallback onShare;
+  final VoidCallback onCopy;
   final VoidCallback onQr;
 
   const _LinkRow({
     required this.link,
-    required this.onCopy,
     required this.onShare,
+    required this.onCopy,
     required this.onQr,
   });
 
   @override
   Widget build(BuildContext context) {
-    final linkTextStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
+    final textStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
       fontFamily: 'monospace',
       color: Colors.black87,
     );
@@ -361,7 +365,6 @@ class _LinkRow extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Сама ссылка (одна строка с обрезкой)
         Row(
           children: [
             const Icon(Icons.link_rounded, size: 18, color: Colors.black54),
@@ -371,13 +374,12 @@ class _LinkRow extends StatelessWidget {
                 link.toString(),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: linkTextStyle,
+                style: textStyle,
               ),
             ),
           ],
         ),
         const SizedBox(height: 10),
-        // Кнопки действий
         Row(
           children: [
             FilledButton.icon(
