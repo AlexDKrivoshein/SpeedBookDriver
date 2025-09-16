@@ -61,6 +61,14 @@
   "home.car.brand": "ម៉ាក",
   "home.car.model": "ម៉ូដែល",
   "home.car.book_rental": "ជួលរថយន្ត",
+
+  "drive.start": "ចាប់ផ្តើមបើកបរ",
+  "drive.title": "ការបើកបរ",
+  "drive.gps_off": "GPS ត្រូវបានបិទ",
+  "drive.enable_gps": "សូមបើកសេវាទីតាំង ដើម្បីចាប់ផ្តើមបើកបរ។",
+  "drive.permission": "ការអនុញ្ញាតទីតាំង",
+  "drive.permission_desc": "សូមអនុញ្ញាតចូលដំណើរការទីតាំង ដើម្បីប្រើផែនទី និងចែករំលែកទីតាំងរបស់អ្នក។",
+
   "home.vehicle.type": "ប្រភេទយានយន្ត",
   "home.vehicle.brand": "ម៉ាក",
   "home.vehicle.model": "ម៉ូដែល",

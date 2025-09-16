@@ -62,6 +62,13 @@
   "home.car.model": "Model",
   "home.car.book_rental": "Book rental car",
 
+  "drive.start": "Start driving",
+  "drive.title": "Driving",
+  "drive.gps_off": "GPS is off",
+  "drive.enable_gps": "Please enable location services to start driving.",
+  "drive.permission": "Location permission",
+  "drive.permission_desc": "Grant location access to use the map and share your position.",
+
   "home.vehicle.type": "Vehicle type",
   "home.vehicle.brand": "Brand",
   "home.vehicle.model": "Model",

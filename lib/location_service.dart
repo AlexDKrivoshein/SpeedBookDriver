@@ -1,3 +1,4 @@
+// lib/location_service.dart
 import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
@@ -12,18 +13,30 @@ import 'api_service.dart';
 /// - Автостарт при логине и автостоп при логауте
 /// - Быстрый старт с getLastKnownPosition()
 class LocationService extends ChangeNotifier {
-  LocationService({this.onDeniedForever}) {
-    _authSub =
-        FirebaseAuth.instance.authStateChanges().listen(_handleAuthChange);
+  // ==== Синглтон ====
+  LocationService._internal({this.onDeniedForever}) {
+    _authSub = FirebaseAuth.instance.authStateChanges().listen(_handleAuthChange);
   }
 
-  /// Вызывается, если доступ к гео навсегда запрещён — можно открыть экран с инструкцией.
+  factory LocationService({VoidCallback? onDeniedForever}) => I;
+
+  static final LocationService I = LocationService._internal();
+
+  // ==== Колбэки ====
+  /// Старый колбэк, если навсегда запрещено (можно использовать в верхнем уровне)
   final VoidCallback? onDeniedForever;
 
-  // Настройки фильтров
-  static const int _minDistanceMeters = 25; // отправляем только при сдвиге >= 25 м
-  static const Duration _minInterval = Duration(seconds: 10); // не чаще 1 раза в 10 сек
+  /// Новый настраиваемый колбэк (UI может подписаться, например DrivingMapPage)
+  VoidCallback? _deniedForeverCallback;
+  void setDeniedForeverCallback(VoidCallback? cb) {
+    _deniedForeverCallback = cb;
+  }
 
+  // ==== Настройки фильтров ====
+  int minDistanceMeters = 25; // отправляем только при сдвиге >= 25 м
+  Duration minInterval = const Duration(seconds: 10); // не чаще 1 раза в 10 сек
+
+  // ==== Внутренние поля ====
   StreamSubscription<Position>? _posSub;
   StreamSubscription<User?>? _authSub;
 
@@ -31,40 +44,53 @@ class LocationService extends ChangeNotifier {
   DateTime? _lastSentAt;
 
   bool _tracking = false;
-
   bool get isRunning => _tracking;
 
+  // ==== Публичный стрим для UI ====
+  final _uiController = StreamController<Position>.broadcast();
+  Stream<Position> get positions => _uiController.stream;
+  Position? lastKnownPosition;
+
+  // ==== Реакция на логин/логаут ====
   Future<void> _handleAuthChange(User? user) async {
     if (user == null) {
-      // logout
       stop();
       _lastSentPosition = null;
       _lastSentAt = null;
+      lastKnownPosition = null;
       return;
     }
-    // login
     await start();
   }
 
-  Future<void> start() async {
+  // ==== Запуск сервиса ====
+  Future<void> start({
+    int? distanceFilter,
+    LocationAccuracy accuracy = LocationAccuracy.high,
+    int? sendMinDistanceMeters,
+    Duration? sendMinInterval,
+  }) async {
     if (_tracking) return;
+
+    if (sendMinDistanceMeters != null) minDistanceMeters = sendMinDistanceMeters;
+    if (sendMinInterval != null) minInterval = sendMinInterval;
 
     // Проверяем сервисы и разрешения
     final serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
-      // можно показать пользователю тост/диалог, но не ломаем поток
       debugPrint('[Location] Location service is disabled.');
-      // Не стартуем, пока не включат — иначе будет поток с ошибками.
       return;
     }
 
-    LocationPermission perm = await Geolocator.checkPermission();
+    var perm = await Geolocator.checkPermission();
     if (perm == LocationPermission.denied) {
       perm = await Geolocator.requestPermission();
     }
+
     if (perm == LocationPermission.deniedForever) {
       debugPrint('[Location] Permission denied forever.');
       onDeniedForever?.call();
+      _deniedForeverCallback?.call();
       return;
     }
     if (perm == LocationPermission.denied) {
@@ -72,10 +98,12 @@ class LocationService extends ChangeNotifier {
       return;
     }
 
-    // Быстрый старт: отправим последнюю известную позицию (если есть)
+    // Быстрый старт: отдадим в UI и попробуем отправить
     try {
       final last = await Geolocator.getLastKnownPosition();
       if (last != null) {
+        lastKnownPosition = last;
+        if (!_uiController.isClosed) _uiController.add(last);
         await _maybeSend(last);
       }
     } catch (e) {
@@ -85,12 +113,12 @@ class LocationService extends ChangeNotifier {
     // Основной поток позиций
     _posSub?.cancel();
     _posSub = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 15, // предварительный фильтр от платформы
+      locationSettings: LocationSettings(
+        accuracy: accuracy,
+        distanceFilter: distanceFilter ?? 15,
       ),
     ).listen(
-      (pos) => _onPosition(pos),
+          (pos) => _onPosition(pos),
       onError: (e, st) => debugPrint('[Location] stream error: $e'),
       cancelOnError: false,
     );
@@ -100,6 +128,7 @@ class LocationService extends ChangeNotifier {
     debugPrint('[Location] Tracking started.');
   }
 
+  // ==== Остановка ====
   void stop() {
     _posSub?.cancel();
     _posSub = null;
@@ -108,37 +137,33 @@ class LocationService extends ChangeNotifier {
     debugPrint('[Location] Tracking stopped.');
   }
 
+  // ==== Внутренние обработчики ====
   Future<void> _onPosition(Position pos) async {
+    lastKnownPosition = pos;
+    if (!_uiController.isClosed) _uiController.add(pos);
     await _maybeSend(pos);
   }
 
   Future<void> _maybeSend(Position pos) async {
-    if (!_shouldSend(pos)) {
-      // пропускаем — слишком близко к прошлой точке или слишком рано
-      return;
-    }
+    if (!_shouldSend(pos)) return;
 
     try {
       await ApiService.setCurrentLocation(pos.latitude, pos.longitude);
       _lastSentPosition = pos;
       _lastSentAt = DateTime.now();
-      // debugPrint('[Location] Sent: ${pos.latitude},${pos.longitude}');
     } catch (e) {
       debugPrint('[Location] send failed: $e');
     }
   }
 
   bool _shouldSend(Position current) {
-    // Троттлинг по времени
     final now = DateTime.now();
-    if (_lastSentAt != null && now.difference(_lastSentAt!) < _minInterval) {
+    if (_lastSentAt != null && now.difference(_lastSentAt!) < minInterval) {
       return false;
     }
 
-    // Первый запуск — отправляем
     if (_lastSentPosition == null) return true;
 
-    // Фильтр по дистанции
     final d = Geolocator.distanceBetween(
       _lastSentPosition!.latitude,
       _lastSentPosition!.longitude,
@@ -146,13 +171,15 @@ class LocationService extends ChangeNotifier {
       current.longitude,
     );
 
-    return d >= _minDistanceMeters;
+    return d >= minDistanceMeters;
   }
 
   @override
   void dispose() {
     _posSub?.cancel();
     _authSub?.cancel();
+    _uiController.close();
+    _deniedForeverCallback = null;
     super.dispose();
   }
 }

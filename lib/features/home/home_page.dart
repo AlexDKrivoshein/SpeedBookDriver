@@ -20,6 +20,7 @@ import 'widgets/car_section.dart';
 import 'widgets/accounts_carousel.dart';
 import 'widgets/dots.dart';
 import 'widgets/transactions_section.dart';
+import '../driving/driving_map_page.dart';
 
 // шарящий ReferralCard (Branch/QR) — отдельный виджет
 import '../referral/referral_card.dart' as Share;
@@ -150,6 +151,12 @@ class _HomePageState extends State<HomePage> with RouteAware {
         _txLoading = false;
       });
     }
+  }
+
+  void _openDriving() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const DrivingMapPage()),
+    );
   }
 
   Future<void> _setReferal() async {
@@ -406,13 +413,15 @@ class _HomePageState extends State<HomePage> with RouteAware {
                   // Car — ПЕРЕД аккаунтами
                   CarSection(
                     hasCar: d.carId != null,
+                    carId: d.carId,
                     number: d.number,
                     brand: d.brand,
                     model: d.model,
-                    carClass: d.carClass,      // NOCAR | AWAITING | REJECTED
-                    carReason: d.carReason,    // причина (если REJECTED)
+                    carClass: d.carClass,            // NOCAR | AWAITING | REJECTED
+                    carReason: d.carReason,          // причина (если REJECTED)
                     onAddCar: _onAddCar,
                     onBookRental: _onBookRental,
+                    onStartDriving: _openDriving,    // <-- навигация на карту
                     t: (k) => t(context, k),
                   ),
                   const SizedBox(height: 12),

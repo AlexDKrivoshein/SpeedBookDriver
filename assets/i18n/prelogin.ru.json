@@ -60,6 +60,14 @@
   "home.car.brand": "Марка",
   "home.car.model": "Модель",
   "home.car.book_rental": "Арендовать машину",
+
+  "drive.start": "Начать смену",
+  "drive.title": "Поездки",
+  "drive.gps_off": "GPS выключен",
+  "drive.enable_gps": "Пожалуйста, включите службы геолокации, чтобы начать смену.",
+  "drive.permission": "Доступ к местоположению",
+  "drive.permission_desc": "Разрешите доступ к местоположению, чтобы использовать карту и делиться позицией.",
+
   "home.vehicle.type": "Тип транспорта",
   "home.vehicle.brand": "Марка",
   "home.vehicle.model": "Модель",

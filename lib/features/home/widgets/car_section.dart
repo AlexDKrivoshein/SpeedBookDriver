@@ -8,12 +8,16 @@ class CarSection extends StatelessWidget {
   final String? brand;
   final String? model;
 
-  // Новые поля статуса машины
+  /// ID машины из базы — если он есть, показываем кнопку Start driving
+  final int? carId;
+
+  /// Статус проверки документов машины
   final String? carClass;   // "NOCAR" | "AWAITING" | "REJECTED"
   final String? carReason;  // причина (если REJECTED)
 
   final VoidCallback onAddCar;
-  final VoidCallback? onBookRental; // опционально
+  final VoidCallback? onBookRental;   // опционально
+  final VoidCallback? onStartDriving; // опционально
   final String Function(String key) t;
 
   const CarSection({
@@ -25,14 +29,17 @@ class CarSection extends StatelessWidget {
     required this.onAddCar,
     required this.t,
     this.onBookRental,
+    this.onStartDriving,
     this.carClass,
     this.carReason,
+    this.carId,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cls = (carClass ?? '').toUpperCase(); // NOCAR / AWAITING / REJECTED
+    final hasCarId = carId != null;
 
     // Бейдж статуса + причина отказа
     Widget statusBlock() {
@@ -41,7 +48,7 @@ class CarSection extends StatelessWidget {
         final Color color = rejected ? Colors.red : Colors.amber;
         final String label = rejected
             ? t('home.verification.rejected')
-            : t('home.verification.pending'); // "Документы на проверке"
+            : t('home.verification.pending');
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -58,7 +65,9 @@ class CarSection extends StatelessWidget {
                 children: [
                   Icon(Icons.verified_user, size: 16, color: color),
                   const SizedBox(width: 6),
-                  Text(label, style: TextStyle(fontWeight: FontWeight.w600, color: color)),
+                  Text(label,
+                      style: TextStyle(
+                          fontWeight: FontWeight.w600, color: color)),
                 ],
               ),
             ),
@@ -72,16 +81,13 @@ class CarSection extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    // Кнопки по правилам:
-    // NOCAR или REJECTED -> две кнопки (Add car + Book rental car)
-    // AWAITING -> только Book rental car
-    List<Widget> buttons() {
+    // Кнопки Add car / Book rental
+    List<Widget> _buildTopButtons() {
       void fallbackRental() {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Not implemented yet')),
         );
       }
-
       final bookRental = onBookRental ?? fallbackRental;
 
       if (cls == 'AWAITING') {
@@ -90,14 +96,12 @@ class CarSection extends StatelessWidget {
             width: double.infinity,
             child: OutlinedButton.icon(
               onPressed: bookRental,
-              // Иконка совместимая со старыми SDK
               icon: const Icon(Icons.directions_car),
               label: Text(t('home.car.book_rental')),
             ),
           ),
         ];
       } else {
-        // NOCAR / REJECTED / (пусто) -> две кнопки
         return [
           Row(
             children: [
@@ -122,8 +126,26 @@ class CarSection extends StatelessWidget {
       }
     }
 
-    // Если машина уже есть — показываем карточку с данными,
-    // плюс статус и кнопки (если применимо).
+    // Нижняя кнопка Start driving
+    Widget _startDrivingButton() {
+      if (!hasCarId) return const SizedBox.shrink();
+
+      void fallback() {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Start driving is not wired yet')),
+        );
+      }
+
+      return SizedBox(
+        width: double.infinity,
+        child: FilledButton.icon(
+          icon: const Icon(Icons.drive_eta),
+          label: Text(t('drive.start')),
+          onPressed: onStartDriving ?? fallback,
+        ),
+      );
+    }
+
     if (hasCar) {
       return InfoCard(
         child: Column(
@@ -139,7 +161,8 @@ class CarSection extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(t('home.car.title'),
-                          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                          style: theme.textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w600)),
                       const SizedBox(height: 6),
                       Wrap(
                         spacing: 16,
@@ -162,24 +185,30 @@ class CarSection extends StatelessWidget {
             statusBlock(),
             if (cls == 'NOCAR' || cls == 'REJECTED' || cls == 'AWAITING') ...[
               const SizedBox(height: 8),
-              ...buttons(),
+              ..._buildTopButtons(),
+            ],
+            if (hasCarId) ...[
+              const SizedBox(height: 12),
+              const Divider(height: 24),
+              _startDrivingButton(),
             ],
           ],
         ),
       );
     }
 
-    // Машины нет — заголовок + статус + нужные кнопки
+    // Машины нет
     return InfoCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(t('home.car.title'),
-              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+              style: theme.textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w600)),
           const SizedBox(height: 6),
           statusBlock(),
           const SizedBox(height: 8),
-          ...buttons(),
+          ..._buildTopButtons(),
         ],
       ),
     );
@@ -190,7 +219,9 @@ class CarSection extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text('$k: ', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+        Text('$k: ',
+            style: theme.textTheme.bodyMedium
+                ?.copyWith(fontWeight: FontWeight.w600)),
         Text(v, style: theme.textTheme.bodyMedium),
       ],
     );

@@ -81,5 +81,7 @@
 		      <string>yourapp.app.link</string>
 		      <string>yourapp-alternate.app.link</string>
 		</array>
+		<key>NSLocationWhenInUseUsageDescription</key>
+        <string>We use your location to receive orders nearby and navigate.</string>
 	</dict>
 </plist>
