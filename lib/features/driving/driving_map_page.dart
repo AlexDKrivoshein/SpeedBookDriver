@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 import 'dart:math' as math;
+import 'dart:ui' as ui; // <-- для ресайза PNG
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle; // <-- загрузка ассета
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 
@@ -22,16 +24,14 @@ class _DrivingMapPageState extends State<DrivingMapPage>
   StreamSubscription<Position>? _positionSub;
 
   LatLng? _currentLatLng;
+  double _heading = 0; // курс для поворота маркера
   bool _loading = true;
 
-  // follow-режим: автоцентрирование на водителе
-  bool _followMe = true;
+  bool _followMe = true;   // автоследование за позицией
+  bool _searching = true;  // «идёт поиск заказов»
 
-  // индикатор «идёт поиск заказов»
-  bool _searching = true;
-
-  // анимация радара
   late final AnimationController _radarCtrl;
+  BitmapDescriptor? _carIcon;
 
   // Эмулятор? — включим liteMode, чтобы снизить нагрузку на CPU/SwiftShader
   bool get _preferLiteMode {
@@ -43,7 +43,7 @@ class _DrivingMapPageState extends State<DrivingMapPage>
     }
   }
 
-  // Простой флаг из --dart-define=flutter.emulator=true (можно расширить через device_info_plus)
+  // Установи при сборке: --dart-define=flutter.emulator=true
   static bool get _isEmulator {
     const env = String.fromEnvironment('flutter.emulator', defaultValue: '');
     return env.isNotEmpty;
@@ -59,16 +59,39 @@ class _DrivingMapPageState extends State<DrivingMapPage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
-    // Сообщим об eternal-deny и закроем страницу
+    // сообщаем об eternal-deny и закрываем экран
     LocationService.I.setDeniedForeverCallback(_onDeniedForever);
 
-    // радар: плавная бесконечная анимация
+    // радар-анимация
     _radarCtrl = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 3),
     )..repeat();
 
+    // грузим иконку после появления MediaQuery (нужен DPR)
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadCarIcon());
+
     _start();
+  }
+
+  // ---- Масштабируем PNG в рантайме под DPI ----
+  Future<BitmapDescriptor> _bitmapFromAsset(String assetPath, int targetWidthPx) async {
+    final data = await rootBundle.load(assetPath);
+    final codec = await ui.instantiateImageCodec(
+      data.buffer.asUint8List(),
+      targetWidth: targetWidthPx,
+    );
+    final fi = await codec.getNextFrame();
+    final bytes = await fi.image.toByteData(format: ui.ImageByteFormat.png);
+    return BitmapDescriptor.fromBytes(bytes!.buffer.asUint8List());
+  }
+
+  Future<void> _loadCarIcon() async {
+    final dpr = MediaQuery.of(context).devicePixelRatio;
+    const logicalWidth = 42.0;        // поменяй на 36–48 если нужно меньше/больше
+    final px = (logicalWidth * dpr).round();
+    final icon = await _bitmapFromAsset('assets/images/car.png', px);
+    if (mounted) setState(() => _carIcon = icon);
   }
 
   @override
@@ -100,28 +123,27 @@ class _DrivingMapPageState extends State<DrivingMapPage>
   Future<void> _start() async {
     setState(() => _loading = true);
 
-    // Запускаем общий сервис (он сам проверит сервисы/права и отправляет координаты с троттлингом)
     if (!LocationService.I.isRunning) {
       await LocationService.I.start(
         accuracy: LocationAccuracy.high,
-        distanceFilter: 20, // платформенный фильтр
+        distanceFilter: 20,
         sendMinDistanceMeters: 25,
         sendMinInterval: const Duration(seconds: 10),
       );
-      // Если здесь случился deniedForever — _onDeniedForever уже вызван и экран закроется.
+      // при deniedForever страница уже закроется колбэком
     }
 
-    // Поставим стартовую точку из кеша сервиса
     final last = LocationService.I.lastKnownPosition;
     if (last != null) {
       _currentLatLng = LatLng(last.latitude, last.longitude);
+      _heading = last.heading.isFinite ? last.heading : 0;
       if (mounted) setState(() {});
     }
 
-    // Подпишемся на поток позиций
     _positionSub?.cancel();
     _positionSub = LocationService.I.positions.listen((pos) {
       _currentLatLng = LatLng(pos.latitude, pos.longitude);
+      _heading = pos.heading.isFinite ? pos.heading : _heading;
       if (mounted) setState(() {});
       _maybeMoveCamera(_currentLatLng!);
     });
@@ -132,8 +154,6 @@ class _DrivingMapPageState extends State<DrivingMapPage>
   Future<void> _maybeMoveCamera(LatLng target, {bool animated = true}) async {
     if (!_controller.isCompleted || !_followMe) return;
     final map = await _controller.future;
-
-    // На эмуляторе — без анимации, чтобы снизить нагрузку
     if (animated && !_preferLiteMode) {
       await map.animateCamera(CameraUpdate.newLatLng(target));
     } else {
@@ -149,7 +169,10 @@ class _DrivingMapPageState extends State<DrivingMapPage>
       Marker(
         markerId: const MarkerId('me'),
         position: _currentLatLng!,
-        infoWindow: const InfoWindow(title: 'You are here'),
+        icon: _carIcon ?? BitmapDescriptor.defaultMarker,
+        rotation: _heading,
+        anchor: const Offset(0.5, 0.6), // чуть ниже центра — выглядит естественнее
+        flat: true,
       ),
     };
 
@@ -159,7 +182,6 @@ class _DrivingMapPageState extends State<DrivingMapPage>
       appBar: AppBar(
         title: const Text('Driving'),
         actions: [
-          // Переключатель «идёт поиск» (если захочешь вручную управлять)
           IconButton(
             tooltip: _searching ? 'Stop searching' : 'Start searching',
             onPressed: () {
@@ -190,7 +212,7 @@ class _DrivingMapPageState extends State<DrivingMapPage>
         children: [
           GoogleMap(
             initialCameraPosition: _initialCamera,
-            myLocationEnabled: true,
+            myLocationEnabled: false, // убираем синюю точку — используем свою машинку
             myLocationButtonEnabled: true,
             markers: markers,
             compassEnabled: true,
@@ -203,14 +225,10 @@ class _DrivingMapPageState extends State<DrivingMapPage>
               }
             },
             onCameraMoveStarted: () {
-              // пользователь начал двигать карту — отключаем follow
-              if (_followMe) {
-                setState(() => _followMe = false);
-              }
+              if (_followMe) setState(() => _followMe = false);
             },
           ),
 
-          // Радар-оверлей (центр по экрану — при follow как раз совпадает с позицией)
           if (_searching)
             Positioned.fill(
               child: IgnorePointer(
@@ -229,15 +247,12 @@ class _DrivingMapPageState extends State<DrivingMapPage>
               ),
             ),
 
-          // Чип «Searching orders…»
           if (_searching)
-            Positioned(
+            const Positioned(
               top: 12,
               left: 12,
               right: 12,
-              child: Center(
-                child: _SearchingChip(),
-              ),
+              child: Center(child: _SearchingChip()),
             ),
 
           if (_loading)
@@ -262,8 +277,10 @@ class _DrivingMapPageState extends State<DrivingMapPage>
   }
 }
 
-/// Небольшой чип с «пульсом» для статуса поиска
+/// Чип статуса поиска с лёгким «пульсом»
 class _SearchingChip extends StatefulWidget {
+  const _SearchingChip();
+
   @override
   State<_SearchingChip> createState() => _SearchingChipState();
 }
@@ -329,10 +346,9 @@ class _SearchingChipState extends State<_SearchingChip>
   }
 }
 
-/// Рисует расходящиеся круги и вращающуюся «щётку» как у радара.
-/// Привязан к центру экрана (при follow совпадает с текущей позицией).
+/// Радар: расходящиеся круги + вращающаяся «щётка»
 class _RadarPainter extends CustomPainter {
-  final double progress; // 0..1, крутится по кругу
+  final double progress; // 0..1
   final Color color;
   final Color background;
 
@@ -346,20 +362,18 @@ class _RadarPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final shortest = math.min(size.width, size.height);
-    final maxR = shortest * 0.35; // радиус эффекта (35% меньшей стороны)
+    final maxR = shortest * 0.35;
 
-    // фон чуть тоним, чтобы круги на любом фоне были видны
     final bgPaint = Paint()
       ..color = background
       ..style = PaintingStyle.fill;
     canvas.drawCircle(center, maxR, bgPaint);
 
-    // расходящиеся круги (3 волны), прозрачность по затуханию
-    final waves = 3;
+    const waves = 3;
     for (int i = 0; i < waves; i++) {
-      final t = (progress + i / waves) % 1.0; // фаза волны
-      final r = lerpDouble(maxR * 0.05, maxR, t)!;
-      final a = (1.0 - t) * 0.6; // затухание
+      final t = (progress + i / waves) % 1.0;
+      final r = _lerp(maxR * 0.05, maxR, t);
+      final a = (1.0 - t) * 0.6;
       final wavePaint = Paint()
         ..color = color.withOpacity(a)
         ..style = PaintingStyle.stroke
@@ -367,33 +381,27 @@ class _RadarPainter extends CustomPainter {
       canvas.drawCircle(center, r, wavePaint);
     }
 
-    // вращающаяся «щётка»
-    final sweep = math.pi / 6; // 30°
+    final sweep = math.pi / 6;
     final angle = progress * 2 * math.pi;
     final rect = Rect.fromCircle(center: center, radius: maxR);
     final sweepPaint = Paint()
       ..shader = SweepGradient(
         startAngle: angle,
         endAngle: angle + sweep,
-        colors: [
-          color.withOpacity(0.35),
-          color.withOpacity(0.0),
-        ],
+        colors: [color.withOpacity(0.35), color.withOpacity(0.0)],
       ).createShader(rect);
-    // сектор
     canvas.drawArc(rect, angle, sweep, true, sweepPaint);
 
-    // центральная точка
     final dot = Paint()..color = color.withOpacity(0.9);
     canvas.drawCircle(center, 3, dot);
   }
 
   @override
-  bool shouldRepaint(covariant _RadarPainter oldDelegate) {
-    return oldDelegate.progress != progress ||
-        oldDelegate.color != color ||
-        oldDelegate.background != background;
+  bool shouldRepaint(covariant _RadarPainter old) {
+    return old.progress != progress ||
+        old.color != color ||
+        old.background != background;
   }
 
-  double? lerpDouble(double a, double b, double t) => a + (b - a) * t;
+  double _lerp(double a, double b, double t) => a + (b - a) * t;
 }
