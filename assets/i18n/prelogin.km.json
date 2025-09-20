@@ -142,5 +142,32 @@
   "referral.share": "Share",
   "referral.copied": "Link copied",
   "referral.error": "Failed to create the link",
-  "referral.share_text": "Join me in SpeedBook: {link}"
+  "referral.share_text": "Join me in SpeedBook: {link}",
+
+  "home.referral.invite_btn": "អញ្ជើញតាមតំណភ្ជាប់",
+  "home.referral.your_id": "លេខយោង",
+
+  "referral.title": "អញ្ជើញមិត្តភក្តិ",
+  "referral.subtitle": "ចែករំលែកតំណភ្ជាប់ ឬ QR — អ្នកទាំងពីរគ្រប់គ្នានឹងទទួលបានរង្វាន់បន្ថែម",
+  "referral.generating": "កំពុងបង្កើតតំណភ្ជាប់…",
+  "referral.your_code": "លេខកូដរបស់អ្នក៖",
+  "referral.copy_code": "ចម្លងលេខកូដ",
+  "referral.copy_link": "ចម្លងតំណភ្ជាប់",
+  "referral.qr_title": "QR សម្រាប់ការអញ្ជើញ",
+  "referral.share": "ចែករំលែក",
+  "referral.copied": "បានចម្លងតំណរួចហើយ",
+  "referral.error": "មិនអាចបង្កើតតំណភ្ជាប់បានទេ",
+  "referral.share_text": "ចូលរួមជាមួយខ្ញុំក្នុង SpeedBook៖ {link}",
+
+  "menu.verification": "ការផ្ទៀងផ្ទាត់",
+  "menu.car": "រថយន្តរបស់ខ្ញុំ",
+  "menu.accounts": "កាបូប និង គណនី",
+  "menu.transactions": "ប្រតិបត្តិការ",
+  "menu.invite": "អញ្ជើញតាមតំណភ្ជាប់",
+  "menu.settings": "ការកំណត់",
+  "menu.language": "ភាសា",
+  "menu.support": "ជំនួយ",
+  "menu.logout": "ចេញពីគណនី",
+
+  "common.not_implemented": "មិនទាន់អនុវត្តទេ"
 }

@@ -141,5 +141,17 @@
   "referral.share": "Поделиться",
   "referral.copied": "Ссылка скопирована",
   "referral.error": "Не удалось создать ссылку",
-  "referral.share_text": "Поехали со мной в SpeedBook: {link}"
+  "referral.share_text": "Поехали со мной в SpeedBook: {link}",
+
+  "menu.verification": "Верификация",
+  "menu.car": "Мой автомобиль",
+  "menu.accounts": "Кошелёк и счета",
+  "menu.transactions": "Транзакции",
+  "menu.invite": "Пригласить по ссылке",
+  "menu.settings": "Настройки",
+  "menu.language": "Язык",
+  "menu.support": "Поддержка",
+  "menu.logout": "Выйти",
+
+  "common.not_implemented": "Пока не реализовано"
 }

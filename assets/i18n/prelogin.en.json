@@ -142,5 +142,17 @@
   "referral.share": "Share",
   "referral.copied": "Link copied",
   "referral.error": "Failed to create the link",
-  "referral.share_text": "Join me in SpeedBook: {link}"
+  "referral.share_text": "Join me in SpeedBook: {link}",
+
+  "menu.verification": "Verification",
+  "menu.car": "My car",
+  "menu.accounts": "Wallet & accounts",
+  "menu.transactions": "Transactions",
+  "menu.invite": "Invite via link",
+  "menu.settings": "Settings",
+  "menu.language": "Language",
+  "menu.support": "Support",
+  "menu.logout": "Log out",
+
+  "common.not_implemented": "Not implemented yet"
 }

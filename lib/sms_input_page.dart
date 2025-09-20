@@ -15,6 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
 
 import 'api_service.dart';
+import 'brand_header.dart';
 import 'brand.dart';
 import 'messaging_service.dart';
 import 'translations.dart';
@@ -37,6 +38,9 @@ class _SmsInputPageState extends State<SmsInputPage>
     with WidgetsBindingObserver {
   static const MethodChannel _configChannel =
   MethodChannel('com.speedbook.taxidriver/config');
+
+  static const _assetPattern    = 'assets/brand/background.png';
+  static const _assetLogoBanner = 'assets/brand/speedbooknew.png';
 
   final _formKey = GlobalKey<FormState>();
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -138,8 +142,9 @@ class _SmsInputPageState extends State<SmsInputPage>
           final ok = await _handleAuth(credential);
           if (!mounted) return;
           if (ok) {
-            ScaffoldMessenger.of(context)
-                .showSnackBar(SnackBar(content: Text(t(context, 'common.success'))));
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(t(context, 'common.success'))),
+            );
             Navigator.of(context).pushNamedAndRemoveUntil('/', (r) => false);
           } else {
             setState(() => _submitting = false);
@@ -148,7 +153,11 @@ class _SmsInputPageState extends State<SmsInputPage>
         verificationFailed: (FirebaseAuthException e) {
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('${t(context, 'common.error')}: ${e.message ?? e.code}')),
+            SnackBar(
+              content: Text(
+                '${t(context, 'common.error')}: ${e.message ?? e.code}',
+              ),
+            ),
           );
         },
         codeSent: (String verificationId, int? resendToken) {
@@ -201,31 +210,30 @@ class _SmsInputPageState extends State<SmsInputPage>
     return {'device': device, 'osVersion': osVersion};
   }
 
-  String _msgForFirebaseError(FirebaseAuthException e, BuildContext context) {
-    // Чтобы в логах всегда было видно, что пришло реально
-    debugPrint('[SMSInput] FirebaseAuthException code=${e.code} message=${e.message}');
+  String _msgForFirebaseError(
+      FirebaseAuthException e, BuildContext context) {
+    debugPrint(
+        '[SMSInput] FirebaseAuthException code=${e.code} message=${e.message}');
 
     switch (e.code) {
       case 'invalid-verification-code':
-      // Неверный одноразовый код (но не путать с длиной — длину проверяем до вызова)
-        return t(context, 'sms.code_invalid');      // напр. "Неверный код"
+        return t(context, 'sms.code_invalid');
       case 'invalid-verification-id':
       case 'missing-verification-id':
-        return t(context, 'sms.code_expired');      // "Срок действия кода истёк. Отправьте новый."
+        return t(context, 'sms.code_expired');
       case 'session-expired':
-        return t(context, 'sms.session_expired');   // "Сессия подтверждения истекла. Отправьте новый код."
+        return t(context, 'sms.session_expired');
       case 'too-many-requests':
-        return t(context, 'sms.too_many_requests'); // "Слишком много попыток. Попробуйте позже."
+        return t(context, 'sms.too_many_requests');
       case 'network-request-failed':
-        return t(context, 'common.network_error');  // "Проблемы с сетью"
+        return t(context, 'common.network_error');
       case 'quota-exceeded':
-        return t(context, 'sms.quota_exceeded');    // лимиты на проекте
+        return t(context, 'sms.quota_exceeded');
       case 'app-not-authorized':
       case 'invalid-app-credential':
       case 'captcha-check-failed':
-        return t(context, 'sms.app_check_failed');  // проблемы с App Check/интегр.
+        return t(context, 'sms.app_check_failed');
       default:
-      // По умолчанию — сообщение Firebase, если есть; иначе общий
         return e.message ?? t(context, 'common.error');
     }
   }
@@ -276,9 +284,12 @@ class _SmsInputPageState extends State<SmsInputPage>
       final platform =
       Platform.isAndroid ? 'android' : (Platform.isIOS ? 'ios' : 'unknown');
 
-      final pendingInviter = prefs.getString('referral.pending_inviter_id');
-      final branchLinkId   = prefs.getString('referral.branch_link_id'); // если ты сохраняешь из Branch.initSession()
-      final referralSource = prefs.getString('referral.source') ?? 'branch'; // branch/manual/adjust/qr...
+      final pendingInviter =
+      prefs.getString('referral.pending_inviter_id');
+      final branchLinkId =
+      prefs.getString('referral.branch_link_id');
+      final referralSource =
+          prefs.getString('referral.source') ?? 'branch';
 
       final urlStr = '${_apiUrl!}/api/auth_driver';
       final response = await http
@@ -299,9 +310,9 @@ class _SmsInputPageState extends State<SmsInputPage>
           'fcm_token': fcmToken,
           'is_driver': true,
           'region': userCountry,
-          'inviter_id'    : pendingInviter,
+          'inviter_id': pendingInviter,
           if (branchLinkId != null) 'link_id': branchLinkId,
-          'source'        : referralSource,
+          'source': referralSource,
         }),
       )
           .timeout(const Duration(seconds: 15));
@@ -311,7 +322,11 @@ class _SmsInputPageState extends State<SmsInputPage>
       if (response.statusCode != 200) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('${t(context, 'common.backend_error')}: ${response.statusCode}')),
+            SnackBar(
+              content: Text(
+                '${t(context, 'common.backend_error')}: ${response.statusCode}',
+              ),
+            ),
           );
         }
         return false;
@@ -321,33 +336,37 @@ class _SmsInputPageState extends State<SmsInputPage>
       debugPrint('[SMSInput] response body: ${response.body}');
 
       if (json['status'] != 'OK') {
-        // Бэкенд не подтвердил авторизацию
         await FirebaseAuth.instance.signOut();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(json['status']?.toString() ?? t(context, 'common.unknown_error'))),
+            SnackBar(
+              content: Text(json['status']?.toString() ??
+                  t(context, 'common.unknown_error')),
+            ),
           );
         }
         return false;
       }
 
-      // 6) Извлекаем токены и подтверждаем успех ТОЛЬКО если они есть
-      final token  = json['data']?['token'];
+      // 6) токены
+      final token = json['data']?['token'];
       final secret = json['data']?['secret'];
       debugPrint('[SMSInput] token: $token, secret: ${secret is String ? "***" : secret}');
 
-      // если был реферал — считаем, что бэкенд его обработал, чистим pending
+      // очищаем pending реферал
       final hadReferral = prefs.getString('referral.pending_inviter_id');
       if (hadReferral != null && hadReferral.isNotEmpty) {
         await prefs.remove('referral.pending_inviter_id');
       }
 
-      if (token is String && token.isNotEmpty && secret is String && secret.isNotEmpty) {
+      if (token is String &&
+          token.isNotEmpty &&
+          secret is String &&
+          secret.isNotEmpty) {
         await prefs.setString('secret', secret);
         await prefs.setString('token', token);
         return true;
       } else {
-        // Ответ OK без токена — считаем ошибкой
         await FirebaseAuth.instance.signOut();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -359,7 +378,8 @@ class _SmsInputPageState extends State<SmsInputPage>
     } on FirebaseAuthException catch (e) {
       if (mounted) {
         final msg = _msgForFirebaseError(e, context);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(msg)));
       }
       return false;
     } on TimeoutException {
@@ -411,9 +431,11 @@ class _SmsInputPageState extends State<SmsInputPage>
       if (!mounted) return;
 
       if (ok) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(t(context, 'common.success'))));
-        Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(t(context, 'common.success'))),
+        );
+        Navigator.of(context)
+            .pushNamedAndRemoveUntil('/', (route) => false);
       } else {
         setState(() => _submitting = false);
       }
@@ -421,7 +443,8 @@ class _SmsInputPageState extends State<SmsInputPage>
       if (!mounted) return;
       setState(() => _submitting = false);
       final msg = _msgForFirebaseError(e, context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(msg)));
     } catch (e) {
       if (!mounted) return;
       setState(() => _submitting = false);
@@ -435,195 +458,216 @@ class _SmsInputPageState extends State<SmsInputPage>
     if (Navigator.of(context).canPop()) {
       Navigator.of(context).pop();
     } else {
-      Navigator.of(context).pushNamedAndRemoveUntil('/login', (r) => false);
+      Navigator.of(context)
+          .pushNamedAndRemoveUntil('/login', (r) => false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final h = MediaQuery.of(context).size.height;
-    final clampedTopExtra = (h * 0.30).clamp(96.0, 160.0) as double;
+    // размеры для баннера — как на phone_input
+    final w = MediaQuery.of(context).size.width;
+    final bannerHeight = (w * 0.26).clamp(96.0, 120.0);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7FBFB),
+      appBar: const BrandHeader(), // единая шапка
       body: Stack(
         children: [
+          // ↓ Фон как в phone_input (без масштабирования)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: Image.asset(
+                _assetPattern,
+                repeat: ImageRepeat.repeat,
+                fit: BoxFit.none,
+                alignment: Alignment.topLeft,
+                filterQuality: FilterQuality.low,
+                color: Colors.white.withOpacity(0.05),
+                colorBlendMode: BlendMode.srcATop,
+              ),
+            ),
+          ),
+
+          // Баннер SpeedBook — как на phone_input
           Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              height: 64,
-              color: Brand.yellow,
-              alignment: Alignment.center,
+            top: 0, left: 0, right: 0,
+            child: SafeArea(
+              bottom: false,
               child: Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Image.asset(
-                  'assets/brand/speedbook.png',
-                  height: 24,
-                  fit: BoxFit.contain,
+                padding: const EdgeInsets.only(top: 8),
+                child: Center(
+                  child: Image.asset(
+                    _assetLogoBanner,
+                    height: bannerHeight,
+                    fit: BoxFit.contain,
+                  ),
                 ),
               ),
             ),
           ),
 
-          SafeArea(
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(24, 24 + clampedTopExtra, 24, 24),
-              child: Form(
-                key: _formKey,
-                child: ListView(
-                  physics: const BouncingScrollPhysics(),
-                  children: [
-                    const SizedBox(height: 8),
+          // Контент страницы
+          Padding(
+            padding: EdgeInsets.fromLTRB(24, bannerHeight + 16, 24, 24),
+            child: Form(
+              key: _formKey,
+              child: ListView(
+                physics: const BouncingScrollPhysics(),
+                children: [
+                  const SizedBox(height: 8),
 
-                    Text(
-                      t(context, 'sms.title'),
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 22,
-                        height: 1.25,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.black87,
-                      ),
+                  Text(
+                    t(context, 'sms.title'),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 22,
+                      height: 1.25,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.black87,
                     ),
-                    const SizedBox(height: 20),
+                  ),
+                  const SizedBox(height: 20),
 
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 18),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Color(0x14000000),
-                            blurRadius: 8,
-                            offset: Offset(0, 3),
-                          )
-                        ],
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.notifications_none_rounded, size: 32),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              t(context, 'sms.check_push'),
-                              style: const TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.black87,
-                              ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 18),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x14000000),
+                          blurRadius: 8,
+                          offset: Offset(0, 3),
+                        )
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.notifications_none_rounded, size: 32),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            t(context, 'sms.check_push'),
+                            style: const TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.black87,
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 28),
-
-                    PinCodeTextField(
-                      appContext: context,
-                      length: 6,
-                      autoFocus: true,
-                      keyboardType: TextInputType.number,
-                      cursorColor: Colors.black,
-                      animationType: AnimationType.none,
-                      onChanged: (val) => _code = val,
-                      onCompleted: (val) => _code = val,
-                      validator: (value) =>
-                      (value == null || value.length != 6)
-                          ? t(context, 'sms.enter_digits')
-                          : null,
-                      pinTheme: PinTheme(
-                        shape: PinCodeFieldShape.underline,
-                        borderRadius: BorderRadius.circular(8),
-                        fieldHeight: 56,
-                        fieldWidth: 44,
-                        activeColor: Colors.black87,
-                        selectedColor: Colors.black87,
-                        inactiveColor: Colors.black38,
-                        borderWidth: 1.4,
-                      ),
-                      boxShadows: const [BoxShadow(color: Colors.transparent)],
-                      enableActiveFill: false,
-                    ),
-
-                    const SizedBox(height: 22),
-
-                    SizedBox(
-                      width: double.infinity,
-                      height: 56,
-                      child: ElevatedButton(
-                        onPressed: _submitting ? null : verifySmsCode,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Brand.yellow,
-                          foregroundColor: Colors.black87,
-                          shadowColor: Colors.transparent,
-                          textStyle: const TextStyle(
-                              fontSize: 18, fontWeight: FontWeight.w600),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16)),
                         ),
-                        child: _submitting
-                            ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                            : Text(t(context, 'sms.next')),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 28),
+
+                  PinCodeTextField(
+                    appContext: context,
+                    length: 6,
+                    autoFocus: true,
+                    keyboardType: TextInputType.number,
+                    cursorColor: Colors.black,
+                    animationType: AnimationType.none,
+                    onChanged: (val) => _code = val,
+                    onCompleted: (val) => _code = val,
+                    validator: (value) => (value == null || value.length != 6)
+                        ? t(context, 'sms.enter_digits')
+                        : null,
+                    pinTheme: PinTheme(
+                      shape: PinCodeFieldShape.underline,
+                      borderRadius: BorderRadius.circular(8),
+                      fieldHeight: 56,
+                      fieldWidth: 44,
+                      activeColor: Colors.black87,
+                      selectedColor: Colors.black87,
+                      inactiveColor: Colors.black38,
+                      borderWidth: 1.4,
+                    ),
+                    boxShadows: const [BoxShadow(color: Colors.transparent)],
+                    enableActiveFill: false,
+                  ),
+
+                  const SizedBox(height: 22),
+
+                  SizedBox(
+                    width: double.infinity,
+                    height: 56,
+                    child: ElevatedButton(
+                      onPressed: _submitting ? null : verifySmsCode,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Brand.yellow,
+                        foregroundColor: Colors.black87,
+                        shadowColor: Colors.transparent,
+                        textStyle: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
                       ),
+                      child: _submitting
+                          ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                          : Text(t(context, 'sms.next')),
                     ),
+                  ),
 
-                    const SizedBox(height: 12),
+                  const SizedBox(height: 12),
 
-                    ValueListenableBuilder<bool>(
-                      valueListenable: _canResendVN,
-                      builder: (context, canResend, _) {
-                        return ValueListenableBuilder<int>(
-                          valueListenable: _secondsVN,
-                          builder: (context, secondsLeft, __) {
-                            final text = canResend
-                                ? t(context, 'sms.get_new_code')
-                                : '${t(context, 'sms.get_new_code')}   ${secondsLeft ~/ 60}:${(secondsLeft % 60).toString().padLeft(2, '0')}';
+                  ValueListenableBuilder<bool>(
+                    valueListenable: _canResendVN,
+                    builder: (context, canResend, _) {
+                      return ValueListenableBuilder<int>(
+                        valueListenable: _secondsVN,
+                        builder: (context, secondsLeft, __) {
+                          final text = canResend
+                              ? t(context, 'sms.get_new_code')
+                              : '${t(context, 'sms.get_new_code')}   ${secondsLeft ~/ 60}:${(secondsLeft % 60).toString().padLeft(2, '0')}';
 
-                            return SizedBox(
-                              width: double.infinity,
-                              height: 52,
-                              child: ElevatedButton(
-                                onPressed: canResend ? _resendCode : null,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFFF1EFEF),
-                                  foregroundColor: Colors.black87,
-                                  disabledBackgroundColor:
-                                  const Color(0xFFF1EFEF),
-                                  disabledForegroundColor: Colors.black38,
-                                  shadowColor: Colors.transparent,
-                                  textStyle: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600),
-                                  shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(16)),
+                          return SizedBox(
+                            width: double.infinity,
+                            height: 52,
+                            child: ElevatedButton(
+                              onPressed: canResend ? _resendCode : null,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFF1EFEF),
+                                foregroundColor: Colors.black87,
+                                disabledBackgroundColor:
+                                const Color(0xFFF1EFEF),
+                                disabledForegroundColor: Colors.black38,
+                                shadowColor: Colors.transparent,
+                                textStyle: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
                                 ),
-                                child: Text(text),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
                               ),
-                            );
-                          },
-                        );
-                      },
-                    ),
+                              child: Text(text),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
 
-                    const SizedBox(height: 16),
-                  ],
-                ),
+                  const SizedBox(height: 16),
+                ],
               ),
             ),
           ),
 
+          // Кнопка «назад» (как была раньше)
           Positioned(
-            top: 16,
-            left: 16,
+            top: 12,
+            left: 12,
             child: SafeArea(
               child: Material(
                 color: Colors.white,

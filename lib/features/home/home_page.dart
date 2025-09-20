@@ -2,6 +2,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+// + добавлено для меню/логаута/языка
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:provider/provider.dart';
+import '../../translations.dart';
+
 import '../../api_service.dart';
 import '../../driver_api.dart';
 import '../../brand.dart';
@@ -19,6 +25,7 @@ import 'widgets/referral_card.dart';      // панель привязки к р
 import 'widgets/car_section.dart';
 import 'widgets/accounts_carousel.dart';
 import 'widgets/dots.dart';
+import 'widgets/home_menu.dart';
 import 'widgets/transactions_section.dart';
 import '../driving/driving_map_page.dart';
 
@@ -56,6 +63,8 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> with RouteAware {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
   DriverDetails? _details;
   bool _loading = true;
   String? _error;
@@ -241,6 +250,34 @@ class _HomePageState extends State<HomePage> with RouteAware {
     );
   }
 
+  Future<void> _pickLanguage(BuildContext context) async {
+    final prefs = await SharedPreferences.getInstance();
+    final current = (prefs.getString('user_lang') ?? 'en').toLowerCase();
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (ctx) => _LanguageSheet(current: current, t: (k) => t(ctx, k)),
+    );
+    if (choice != null && mounted) {
+      await prefs.setString('user_lang', choice);
+      // если Translations подключён — применим на лету
+      try {
+        await context.read<Translations>().setLang(choice);
+      } catch (_) {}
+      setState(() {});
+    }
+  }
+
+  Future<void> _logout(BuildContext context) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('token');
+    await prefs.remove('secret');
+    await FirebaseAuth.instance.signOut();
+    if (!mounted) return;
+    Navigator.of(context).pushNamedAndRemoveUntil('/login', (r) => false);
+  }
+
   static String _initials(String s) {
     final parts = s.trim().split(RegExp(r'\s+'));
     if (parts.isEmpty || parts.first.isEmpty) return '🙂';
@@ -258,6 +295,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
       return Theme(
         data: theme,
         child: Scaffold(
+          key: _scaffoldKey,
           appBar: BrandHeader(),
           body: const Center(child: CircularProgressIndicator()),
         ),
@@ -269,6 +307,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
       return Theme(
         data: theme,
         child: Scaffold(
+          key: _scaffoldKey,
           appBar: BrandHeader(),
           body: Center(
             child: Padding(
@@ -305,7 +344,36 @@ class _HomePageState extends State<HomePage> with RouteAware {
     return Theme(
       data: theme,
       child: Scaffold(
+        key: _scaffoldKey,
         appBar: BrandHeader(),
+        drawer: HomeMenu(
+          details: d,
+          onInvite: _openShareReferral,
+          onOpenVerification: _openVerification,
+          onOpenCar: _onAddCar,
+          onOpenTransactions: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(t(context, 'common.not_implemented'))),
+            );
+          },
+          onOpenAccounts: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(t(context, 'common.not_implemented'))),
+            );
+          },
+          onOpenSettings: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(t(context, 'common.not_implemented'))),
+            );
+          },
+          onOpenSupport: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(t(context, 'common.not_implemented'))),
+            );
+          },
+          onPickLanguage: _pickLanguage,
+          onLogout: _logout,
+        ),
         body: Stack(
           children: [
             const HomeBackground(), // узор
@@ -413,6 +481,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
                   // Car — ПЕРЕД аккаунтами
                   CarSection(
                     hasCar: d.carId != null,
+                    // если в твоём CarSection нет этих параметров — удали строки ниже
                     carId: d.carId,
                     number: d.number,
                     brand: d.brand,
@@ -421,7 +490,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
                     carReason: d.carReason,          // причина (если REJECTED)
                     onAddCar: _onAddCar,
                     onBookRental: _onBookRental,
-                    onStartDriving: _openDriving,    // <-- навигация на карту
+                    onStartDriving: _openDriving,    // переход на карту
                     t: (k) => t(context, k),
                   ),
                   const SizedBox(height: 12),
@@ -500,8 +569,75 @@ class _HomePageState extends State<HomePage> with RouteAware {
                 ],
               ),
             ),
+
+            // Кнопка открытия меню (как в «Приложение такси»)
+            Positioned(
+              top: 0,
+              left: 12,
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 0), // было top:12; стало почти у края
+                  child: Material(
+                    color: Colors.white,
+                    shape: const CircleBorder(),
+                    elevation: 4,
+                    child: InkWell(
+                      customBorder: const CircleBorder(),
+                      onTap: () => _scaffoldKey.currentState?.openDrawer(),
+                      child: const Padding(
+                        padding: EdgeInsets.all(10),
+                        child: Icon(Icons.menu, color: Colors.black87),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ─── простой выбор языка ───────────────────────────────────────────────────────
+
+class _LanguageSheet extends StatelessWidget {
+  const _LanguageSheet({required this.current, required this.t});
+  final String current;
+  final String Function(String) t;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = const [
+      {'code': 'en', 'label': 'English'},
+      {'code': 'ru', 'label': 'Русский'},
+      {'code': 'km', 'label': 'ខ្មែរ'},
+    ];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            t('menu.language'),
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          for (final it in items)
+            ListTile(
+              leading: Icon(
+                it['code'] == current
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_off,
+              ),
+              title: Text(it['label']!),
+              onTap: () => Navigator.of(context).pop(it['code']),
+            ),
+        ],
       ),
     );
   }

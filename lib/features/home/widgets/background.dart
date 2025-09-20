@@ -1,30 +1,34 @@
 import 'package:flutter/material.dart';
 
 class HomeBackground extends StatelessWidget {
-  const HomeBackground({super.key});
+  /// Прозрачность «вуали» над паттерном, чтобы фон не спорил с контентом.
+  final double opacity;
 
-  static const _assetPattern = 'assets/brand/background_alpha.png';
-  static const double _bgScale = 1.15;
-  static const double _bgOpacityLight = 0.18;
-  static const double _bgOpacityDark = 0.10;
+  /// Выравнивание паттерна (на всех экранах используем topLeft).
+  final Alignment alignment;
+
+  const HomeBackground({
+    super.key,
+    this.opacity = 0.05,
+    this.alignment = Alignment.topLeft,
+  });
+
+  static const _assetPattern = 'assets/brand/background.png';
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final opacity = isDark ? _bgOpacityDark : _bgOpacityLight;
-
+    // Виджет рассчитан на использование внутри Stack.
     return Positioned.fill(
-      child: Transform.scale(
-        scale: _bgScale,
-        alignment: Alignment.topLeft,
+      child: IgnorePointer(
         child: Image.asset(
           _assetPattern,
-          fit: BoxFit.none,
-          repeat: ImageRepeat.repeat,
-          alignment: Alignment.topLeft,
-          filterQuality: FilterQuality.none,
-          excludeFromSemantics: true,
-          opacity: AlwaysStoppedAnimation(opacity),
+          repeat: ImageRepeat.repeat, // плитка повторяется
+          fit: BoxFit.none,           // не масштабируем (как в phone_input)
+          alignment: alignment,
+          filterQuality: FilterQuality.low,
+          // лёгкая белая «вуаль», чтобы фон не был навязчивым
+          color: Colors.white.withOpacity(opacity),
+          colorBlendMode: BlendMode.srcATop,
         ),
       ),
     );

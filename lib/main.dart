@@ -26,7 +26,6 @@ Future<void> _initBranchDeepLinking() async {
   // Инициализация Branch
   await FlutterBranchSdk.init(
     enableLogging: kDebugMode,
-    disableTracking: false,
   );
 
   if (kDebugMode) {
