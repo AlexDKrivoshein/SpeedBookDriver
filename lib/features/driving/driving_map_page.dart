@@ -1,15 +1,20 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 import 'dart:math' as math;
-import 'dart:ui' as ui; // <-- для ресайза PNG
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show rootBundle; // <-- загрузка ассета
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../../location_service.dart';
+import '../../driver_api.dart';
+import '../../api_service.dart';
+
+String t(BuildContext context, String key) =>
+    ApiService.getTranslationForWidget(context, key);
 
 class DrivingMapPage extends StatefulWidget {
   const DrivingMapPage({super.key});
@@ -24,16 +29,22 @@ class _DrivingMapPageState extends State<DrivingMapPage>
   StreamSubscription<Position>? _positionSub;
 
   LatLng? _currentLatLng;
-  double _heading = 0; // курс для поворота маркера
+  double _heading = 0;
   bool _loading = true;
 
-  bool _followMe = true;   // автоследование за позицией
-  bool _searching = true;  // «идёт поиск заказов»
+  bool _followMe = true;
+  bool _searching = true;
 
   late final AnimationController _radarCtrl;
   BitmapDescriptor? _carIcon;
 
-  // Эмулятор? — включим liteMode, чтобы снизить нагрузку на CPU/SwiftShader
+  // оффер/маршрут
+  Map<String, dynamic>? _offer;     // data из get_offers
+  final Set<Polyline> _polylines = {};
+  final Set<Marker> _offerMarkers = {};
+  bool _offerPolling = false;
+  bool _startSent = false;
+
   bool get _preferLiteMode {
     if (kIsWeb) return false;
     try {
@@ -43,7 +54,6 @@ class _DrivingMapPageState extends State<DrivingMapPage>
     }
   }
 
-  // Установи при сборке: --dart-define=flutter.emulator=true
   static bool get _isEmulator {
     const env = String.fromEnvironment('flutter.emulator', defaultValue: '');
     return env.isNotEmpty;
@@ -59,28 +69,23 @@ class _DrivingMapPageState extends State<DrivingMapPage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
-    // сообщаем об eternal-deny и закрываем экран
     LocationService.I.setDeniedForeverCallback(_onDeniedForever);
 
-    // радар-анимация
-    _radarCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 3),
-    )..repeat();
+    _radarCtrl =
+    AnimationController(vsync: this, duration: const Duration(seconds: 3))
+      ..repeat();
 
-    // грузим иконку после появления MediaQuery (нужен DPR)
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadCarIcon());
 
     _start();
   }
 
   // ---- Масштабируем PNG в рантайме под DPI ----
-  Future<BitmapDescriptor> _bitmapFromAsset(String assetPath, int targetWidthPx) async {
+  Future<BitmapDescriptor> _bitmapFromAsset(
+      String assetPath, int targetWidthPx) async {
     final data = await rootBundle.load(assetPath);
-    final codec = await ui.instantiateImageCodec(
-      data.buffer.asUint8List(),
-      targetWidth: targetWidthPx,
-    );
+    final codec =
+    await ui.instantiateImageCodec(data.buffer.asUint8List(), targetWidth: targetWidthPx);
     final fi = await codec.getNextFrame();
     final bytes = await fi.image.toByteData(format: ui.ImageByteFormat.png);
     return BitmapDescriptor.fromBytes(bytes!.buffer.asUint8List());
@@ -88,7 +93,7 @@ class _DrivingMapPageState extends State<DrivingMapPage>
 
   Future<void> _loadCarIcon() async {
     final dpr = MediaQuery.of(context).devicePixelRatio;
-    const logicalWidth = 42.0;        // поменяй на 36–48 если нужно меньше/больше
+    const logicalWidth = 42.0;
     final px = (logicalWidth * dpr).round();
     final icon = await _bitmapFromAsset('assets/images/car.png', px);
     if (mounted) setState(() => _carIcon = icon);
@@ -100,6 +105,8 @@ class _DrivingMapPageState extends State<DrivingMapPage>
     _positionSub?.cancel();
     LocationService.I.setDeniedForeverCallback(null);
     _radarCtrl.dispose();
+    _offerPolling = false;
+    _callStopDriving();
     super.dispose();
   }
 
@@ -130,7 +137,6 @@ class _DrivingMapPageState extends State<DrivingMapPage>
         sendMinDistanceMeters: 25,
         sendMinInterval: const Duration(seconds: 10),
       );
-      // при deniedForever страница уже закроется колбэком
     }
 
     final last = LocationService.I.lastKnownPosition;
@@ -138,15 +144,21 @@ class _DrivingMapPageState extends State<DrivingMapPage>
       _currentLatLng = LatLng(last.latitude, last.longitude);
       _heading = last.heading.isFinite ? last.heading : 0;
       if (mounted) setState(() {});
+      await _tryStartDrivingOnce(last);
     }
 
     _positionSub?.cancel();
-    _positionSub = LocationService.I.positions.listen((pos) {
+    _positionSub = LocationService.I.positions.listen((pos) async {
       _currentLatLng = LatLng(pos.latitude, pos.longitude);
       _heading = pos.heading.isFinite ? pos.heading : _heading;
       if (mounted) setState(() {});
       _maybeMoveCamera(_currentLatLng!);
+      await _tryStartDrivingOnce(pos);
     });
+
+    if (_searching && !_offerPolling) {
+      _startOfferPolling();
+    }
 
     if (mounted) setState(() => _loading = false);
   }
@@ -161,26 +173,527 @@ class _DrivingMapPageState extends State<DrivingMapPage>
     }
   }
 
+  /// Однократный вызов start_driving с координатами; при ошибке — возврат на главную
+  Future<void> _tryStartDrivingOnce(Position pos) async {
+    if (_startSent) return;
+
+    final double? heading =
+    (pos.heading.isFinite && pos.heading >= 0) ? (pos.heading % 360) : null;
+    final double? accuracy =
+    (pos.accuracy.isFinite && pos.accuracy > 0) ? pos.accuracy : null;
+
+    try {
+      final reply = await DriverApi.startDriving(
+        lat: pos.latitude,
+        lng: pos.longitude, // отправляем lng
+        heading: heading,
+        accuracy: accuracy,
+      ).timeout(const Duration(seconds: 12));
+
+      final status = (reply['status'] ?? '').toString();
+      if (status != 'OK') {
+        if (!mounted) return;
+        final msg = reply['message']?.toString() ?? 'Start driving failed';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${t(context, 'common.error')}: $msg')),
+        );
+        _goHome();
+        return;
+      }
+
+      _startSent = true;
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(t(context, 'common.network_error'))),
+      );
+      _goHome();
+    }
+  }
+
+  // ========= ПУЛЛИНГ ОФФЕРОВ =========
+
+  void _startOfferPolling() {
+    _offerPolling = true;
+    _pollOffers();
+  }
+
+  Future<void> _pollOffers() async {
+    while (mounted && _offerPolling && _searching && _offer == null) {
+      try {
+        final reply =
+        await DriverApi.getOffers().timeout(const Duration(seconds: 10));
+
+        // error: REQUEST_NOT FOUND -> сразу на главную
+        final err = reply['error']?.toString();
+        if (err == 'REQUEST_NOT FOUND') {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(t(context, 'common.error'))),
+          );
+          _goHome();
+          return;
+        }
+
+        final status = (reply['status'] ?? '').toString();
+        final data = reply['data'];
+
+        if (status == 'OK') {
+          if (data is Map && (data['result']?.toString() == 'NOT_FOUND')) {
+            await Future.delayed(const Duration(seconds: 1));
+            continue;
+          }
+
+          if (data is Map) {
+            final reqId = _asInt(data['request_id']);
+            if (reqId > 0) {
+              // нашли оффер
+              _offer = Map<String, dynamic>.from(data as Map);
+              _offerPolling = false;
+              _searching = false;
+              _radarCtrl.stop();
+
+              final fromName    = _asString(data['from_name']);
+              final fromDetails = _asString(data['from_details']);
+              final toName      = _asString(data['to_name']);
+              final toDetails   = _asString(data['to_details']);
+
+              _buildOfferRoutePolyline(
+                _asString(data['waypoint']),
+                fromName: fromName,
+                fromDetails: fromDetails,
+                toName: toName,
+                toDetails: toDetails,
+              );
+
+              if (mounted) {
+                setState(() {});
+                _showOfferSheet();
+              }
+              return;
+            }
+          }
+        }
+
+        await Future.delayed(const Duration(seconds: 1));
+      } catch (_) {
+        await Future.delayed(const Duration(seconds: 1));
+      }
+    }
+  }
+
+  void _buildOfferRoutePolyline(
+      String? encoded, {
+        required String fromName,
+        required String fromDetails,
+        required String toName,
+        required String toDetails,
+      }) async {
+    _polylines.clear();
+    _offerMarkers.clear();
+
+    if (encoded == null || encoded.isEmpty) {
+      setState(() {});
+      return;
+    }
+    final pts = _decodePolyline(encoded);
+    if (pts.isNotEmpty) {
+      // линия маршрута
+      _polylines.add(Polyline(
+        polylineId: const PolylineId('offer_route'),
+        points: pts,
+        width: 5,
+        color: Colors.blueAccent,
+        geodesic: true,
+      ));
+
+      // маркеры начала/конца
+      final start = pts.first;
+      final end   = pts.last;
+      _offerMarkers.add(Marker(
+        markerId: const MarkerId('from'),
+        position: start,
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+        infoWindow: InfoWindow(title: fromName, snippet: fromDetails),
+      ));
+      _offerMarkers.add(Marker(
+        markerId: const MarkerId('to'),
+        position: end,
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+        infoWindow: InfoWindow(title: toName, snippet: toDetails),
+      ));
+
+      // подвинем камеру — по границам маршрута
+      try {
+        final map = await _controller.future;
+        final bounds = _computeBounds(pts);
+        await map.animateCamera(CameraUpdate.newLatLngBounds(bounds, 48));
+      } catch (_) {
+        await _maybeMoveCamera(start, animated: true);
+      }
+      setState(() {});
+    }
+  }
+
+  LatLngBounds _computeBounds(List<LatLng> pts) {
+    double minLat = pts.first.latitude, maxLat = pts.first.latitude;
+    double minLng = pts.first.longitude, maxLng = pts.first.longitude;
+    for (final p in pts) {
+      if (p.latitude  < minLat) minLat = p.latitude;
+      if (p.latitude  > maxLat) maxLat = p.latitude;
+      if (p.longitude < minLng) minLng = p.longitude;
+      if (p.longitude > maxLng) maxLng = p.longitude;
+    }
+    return LatLngBounds(
+      southwest: LatLng(minLat, minLng),
+      northeast: LatLng(maxLat, maxLng),
+    );
+  }
+
+  // Google polyline decoder -> List<LatLng>
+  List<LatLng> _decodePolyline(String encoded) {
+    final List<LatLng> points = [];
+    int index = 0, lat = 0, lng = 0;
+
+    while (index < encoded.length) {
+      int b, shift = 0, result = 0;
+      do {
+        b = encoded.codeUnitAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      final dlat = ((result & 1) != 0) ? ~(result >> 1) : (result >> 1);
+      lat += dlat;
+
+      shift = 0;
+      result = 0;
+      do {
+        b = encoded.codeUnitAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      final dlng = ((result & 1) != 0) ? ~(result >> 1) : (result >> 1);
+      lng += dlng;
+
+      points.add(LatLng(lat / 1e5, lng / 1e5));
+    }
+    return points;
+  }
+
+  Future<void> _callStopDriving() async {
+    try {
+      await DriverApi.stopDriving().timeout(const Duration(seconds: 8));
+    } catch (_) {/* ignore */}
+  }
+
+  void _goHome() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+    });
+  }
+
+  // ========= UI =========
+
+  void _showOfferSheet() {
+    if (!mounted || _offer == null) return;
+    final data = _offer!;
+    final fromName    = _asString(data['from_name']);
+    final fromDetails = _asString(data['from_details']);
+    final toName      = _asString(data['to_name']);
+    final toDetails   = _asString(data['to_details']);
+    final distanceM   = _asNum(data['distance']);
+    final durationStr = _formatDuration(_offer!['duration']); // форматировано
+    final cost        = _asString(data['cost']);
+    final currency    = _asString(data['currency']);
+
+    showModalBottomSheet(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      isDismissible: false,
+      enableDrag: false,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 46,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.black26,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                Row(
+                  children: [
+                    const Icon(Icons.location_pin, color: Colors.green),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        fromName,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ],
+                ),
+                if (fromDetails.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 32, top: 2, bottom: 8),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        fromDetails,
+                        style: const TextStyle(color: Colors.black54),
+                      ),
+                    ),
+                  ),
+
+                Row(
+                  children: [
+                    const Icon(Icons.flag, color: Colors.red),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        toName,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ],
+                ),
+                if (toDetails.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 32, top: 2, bottom: 8),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        toDetails,
+                        style: const TextStyle(color: Colors.black54),
+                      ),
+                    ),
+                  ),
+
+                const SizedBox(height: 8),
+
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _pill(icon: Icons.straighten, label: '${(distanceM / 1000).toStringAsFixed(1)} km'),
+                    _pill(icon: Icons.schedule,   label: durationStr),
+                    _pill(icon: Icons.payments,   label: '$cost $currency'),
+                  ],
+                ),
+
+                const SizedBox(height: 14),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _onDecline,
+                        icon: const Icon(Icons.close),
+                        label: Text(t(context, 'common.cancel')),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: _onAccept,
+                        icon: const Icon(Icons.check),
+                        label: Text(t(context, 'common.ok')),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _pill({required IconData icon, required String label}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: ShapeDecoration(
+        color: Colors.black.withOpacity(0.04),
+        shape: const StadiumBorder(
+          side: BorderSide(color: Colors.black12),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 18),
+          const SizedBox(width: 6),
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _onAccept() async {
+    if (_offer == null) return;
+    final reqId  = _asInt(_offer!['request_id']);
+    final driveId= _asInt(_offer!['drive_id']);
+    try {
+      final r = await DriverApi.acceptDrive(requestId: reqId, driveId: driveId)
+          .timeout(const Duration(seconds: 10));
+      if ((r['status'] ?? '').toString() == 'OK') {
+        if (!mounted) return;
+        Navigator.of(context).pop(); // закрыть шит
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(t(context, 'common.success'))),
+        );
+        // TODO: перейти на экран активного заказа/навигации
+      } else {
+        if (!mounted) return;
+        final msg = r['message']?.toString() ?? 'Accept failed';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${t(context, 'common.error')}: $msg')),
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(t(context, 'common.network_error'))),
+      );
+    }
+  }
+
+  Future<void> _onDecline() async {
+    if (_offer == null) return;
+    final reqId  = _asInt(_offer!['request_id']);
+    final driveId= _asInt(_offer!['drive_id']);
+    try {
+      final r = await DriverApi.declineDrive(requestId: reqId, driveId: driveId)
+          .timeout(const Duration(seconds: 10));
+      if ((r['status'] ?? '').toString() == 'OK') {
+        if (!mounted) return;
+        Navigator.of(context).pop(); // закрыть шит
+        _offer = null;
+        _polylines.clear();
+        _offerMarkers.clear();
+        _searching = true;
+        _radarCtrl.repeat();
+        if (!_offerPolling) _startOfferPolling();
+        setState(() {});
+      } else {
+        if (!mounted) return;
+        final msg = r['message']?.toString() ?? 'Decline failed';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${t(context, 'common.error')}: $msg')),
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(t(context, 'common.network_error'))),
+      );
+    }
+  }
+
+  // ---------- безопасные парсеры ----------
+  int _asInt(dynamic v) {
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return int.tryParse(v?.toString() ?? '') ?? 0;
+  }
+
+  num _asNum(dynamic v) {
+    if (v is num) return v;
+    return num.tryParse(v?.toString() ?? '') ?? 0;
+  }
+
+  String _asString(dynamic v) => v?.toString() ?? '';
+
+  /// Превращаем interval/строку в "xh ym"
+  String _formatDuration(dynamic raw) {
+    // если число — считаем как секунды
+    if (raw is num) return _fmtSeconds(raw.toInt());
+
+    final s = _asString(raw).trim();
+    // HH:MM:SS
+    final hms = RegExp(r'^(\d+):([0-5]\d):([0-5]\d)$');
+    final m = hms.firstMatch(s);
+    if (m != null) {
+      final h = int.parse(m.group(1)!);
+      final mi = int.parse(m.group(2)!);
+      return _fmtHM(h, mi);
+    }
+
+    // MM:SS
+    final ms = RegExp(r'^([0-5]?\d):([0-5]\d)$').firstMatch(s);
+    if (ms != null) {
+      final h = 0;
+      final mi = int.parse(ms.group(1)!);
+      return _fmtHM(h, mi);
+    }
+
+    // ISO8601-ish PT#H#M#S
+    final iso = RegExp(r'P(T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)', caseSensitive: false)
+        .firstMatch(s);
+    if (iso != null) {
+      final h = int.tryParse(iso.group(2) ?? '') ?? 0;
+      final mi = int.tryParse(iso.group(3) ?? '') ?? 0;
+      return _fmtHM(h, mi);
+    }
+
+    // Postgres text "1 hour 20 mins"
+    final pg = RegExp(r'(?:(\d+)\s*hour[s]?)?\s*(?:(\d+)\s*min)', caseSensitive: false)
+        .firstMatch(s);
+    if (pg != null) {
+      final h = int.tryParse(pg.group(1) ?? '0') ?? 0;
+      final mi = int.tryParse(pg.group(2) ?? '0') ?? 0;
+      return _fmtHM(h, mi);
+    }
+
+    // fallback
+    return s;
+  }
+
+  String _fmtSeconds(int sec) {
+    final h = sec ~/ 3600;
+    final m = (sec % 3600) ~/ 60;
+    return _fmtHM(h, m);
+  }
+
+  String _fmtHM(int h, int m) {
+    if (h > 0 && m > 0) return '${h}h ${m}m';
+    if (h > 0) return '${h}h';
+    return '${m}m';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final markers = _currentLatLng == null
-        ? <Marker>{}
-        : {
-      Marker(
+    // объединяем маркеры: машина + оффер
+    final Set<Marker> markers = {..._offerMarkers};
+    if (_currentLatLng != null) {
+      markers.add(Marker(
         markerId: const MarkerId('me'),
         position: _currentLatLng!,
         icon: _carIcon ?? BitmapDescriptor.defaultMarker,
         rotation: _heading,
-        anchor: const Offset(0.5, 0.6), // чуть ниже центра — выглядит естественнее
+        anchor: const Offset(0.5, 0.6),
         flat: true,
-      ),
-    };
+      ));
+    }
 
     final theme = Theme.of(context);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Driving'),
+        title: Text(t(context, 'driving.title')),
         actions: [
           IconButton(
             tooltip: _searching ? 'Stop searching' : 'Start searching',
@@ -189,8 +702,10 @@ class _DrivingMapPageState extends State<DrivingMapPage>
                 _searching = !_searching;
                 if (_searching) {
                   _radarCtrl.repeat();
+                  if (!_offerPolling && _offer == null) _startOfferPolling();
                 } else {
                   _radarCtrl.stop();
+                  _offerPolling = false;
                 }
               });
             },
@@ -212,9 +727,10 @@ class _DrivingMapPageState extends State<DrivingMapPage>
         children: [
           GoogleMap(
             initialCameraPosition: _initialCamera,
-            myLocationEnabled: false, // убираем синюю точку — используем свою машинку
+            myLocationEnabled: false,
             myLocationButtonEnabled: true,
             markers: markers,
+            polylines: _polylines,
             compassEnabled: true,
             zoomControlsEnabled: false,
             liteModeEnabled: _preferLiteMode,
@@ -229,7 +745,7 @@ class _DrivingMapPageState extends State<DrivingMapPage>
             },
           ),
 
-          if (_searching)
+          if (_searching && _offer == null)
             Positioned.fill(
               child: IgnorePointer(
                 child: AnimatedBuilder(
@@ -239,7 +755,8 @@ class _DrivingMapPageState extends State<DrivingMapPage>
                       painter: _RadarPainter(
                         progress: _radarCtrl.value,
                         color: theme.colorScheme.primary,
-                        background: theme.colorScheme.primary.withOpacity(0.05),
+                        background:
+                        theme.colorScheme.primary.withOpacity(0.05),
                       ),
                     );
                   },
@@ -247,12 +764,42 @@ class _DrivingMapPageState extends State<DrivingMapPage>
               ),
             ),
 
-          if (_searching)
-            const Positioned(
+          if (_searching && _offer == null)
+            Positioned(
               top: 12,
               left: 12,
               right: 12,
-              child: Center(child: _SearchingChip()),
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: ShapeDecoration(
+                    color: theme.colorScheme.surface.withOpacity(0.9),
+                    shape: StadiumBorder(
+                      side: BorderSide(color: theme.colorScheme.primary.withOpacity(0.25)),
+                    ),
+                    shadows: [
+                      BoxShadow(
+                        blurRadius: 12,
+                        spreadRadius: 1,
+                        color: Colors.black.withOpacity(0.08),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.radar, size: 18, color: theme.colorScheme.primary),
+                      const SizedBox(width: 8),
+                      Text(
+                        t(context, 'driving.searching'),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
 
           if (_loading)
@@ -272,75 +819,6 @@ class _DrivingMapPageState extends State<DrivingMapPage>
           }
         },
         child: const Icon(Icons.center_focus_strong),
-      ),
-    );
-  }
-}
-
-/// Чип статуса поиска с лёгким «пульсом»
-class _SearchingChip extends StatefulWidget {
-  const _SearchingChip();
-
-  @override
-  State<_SearchingChip> createState() => _SearchingChipState();
-}
-
-class _SearchingChipState extends State<_SearchingChip>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
-  late final Animation<double> _pulse;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
-    )..repeat(reverse: true);
-    _pulse = Tween<double>(begin: 0.6, end: 1.0).animate(
-      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
-    );
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return ScaleTransition(
-      scale: _pulse,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: ShapeDecoration(
-          color: theme.colorScheme.surface.withOpacity(0.9),
-          shape: StadiumBorder(
-            side: BorderSide(color: theme.colorScheme.primary.withOpacity(0.25)),
-          ),
-          shadows: [
-            BoxShadow(
-              blurRadius: 12,
-              spreadRadius: 1,
-              color: Colors.black.withOpacity(0.08),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.radar, size: 18, color: theme.colorScheme.primary),
-            const SizedBox(width: 8),
-            Text(
-              'Searching orders…',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

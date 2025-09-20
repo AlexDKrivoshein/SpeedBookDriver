@@ -169,5 +169,8 @@
   "menu.support": "ជំនួយ",
   "menu.logout": "ចេញពីគណនី",
 
-  "common.not_implemented": "មិនទាន់អនុវត្តទេ"
+  "common.not_implemented": "មិនទាន់អនុវត្តទេ",
+
+  "driving.title": "ការបើកបរ",
+  "driving.searching": "កំពុងស្វែងរកការបញ្ជាទិញ…"
 }

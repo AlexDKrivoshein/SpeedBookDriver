@@ -154,5 +154,9 @@
   "menu.support": "Support",
   "menu.logout": "Log out",
 
-  "common.not_implemented": "Not implemented yet"
+  "common.not_implemented": "Not implemented yet",
+
+  "driving.title": "Driving",
+  "driving.searching": "Searching orders…"
+
 }

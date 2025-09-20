@@ -296,7 +296,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
         data: theme,
         child: Scaffold(
           key: _scaffoldKey,
-          appBar: BrandHeader(),
+          appBar: BrandHeader(
+            onMenuTap: () => _scaffoldKey.currentState?.openDrawer(),
+          ),
           body: const Center(child: CircularProgressIndicator()),
         ),
       );
@@ -308,7 +310,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
         data: theme,
         child: Scaffold(
           key: _scaffoldKey,
-          appBar: BrandHeader(),
+          appBar: BrandHeader(
+            onMenuTap: () => _scaffoldKey.currentState?.openDrawer(),
+          ),
           body: Center(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -345,7 +349,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
       data: theme,
       child: Scaffold(
         key: _scaffoldKey,
-        appBar: BrandHeader(),
+        appBar: BrandHeader(
+          onMenuTap: () => _scaffoldKey.currentState?.openDrawer(),
+        ),
         drawer: HomeMenu(
           details: d,
           onInvite: _openShareReferral,
@@ -569,31 +575,6 @@ class _HomePageState extends State<HomePage> with RouteAware {
                 ],
               ),
             ),
-
-            // Кнопка открытия меню (как в «Приложение такси»)
-            Positioned(
-              top: 0,
-              left: 12,
-              child: SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 0), // было top:12; стало почти у края
-                  child: Material(
-                    color: Colors.white,
-                    shape: const CircleBorder(),
-                    elevation: 4,
-                    child: InkWell(
-                      customBorder: const CircleBorder(),
-                      onTap: () => _scaffoldKey.currentState?.openDrawer(),
-                      child: const Padding(
-                        padding: EdgeInsets.all(10),
-                        child: Icon(Icons.menu, color: Colors.black87),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
           ],
         ),
       ),

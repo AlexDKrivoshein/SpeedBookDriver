@@ -245,7 +245,10 @@ class _AddCarPageState extends State<AddCarPage> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: BrandHeader(),
+      appBar: BrandHeader(
+        showBack: true,
+        onBackTap: () => Navigator.of(context).pop(),
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null

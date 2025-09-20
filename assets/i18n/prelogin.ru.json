@@ -153,5 +153,8 @@
   "menu.support": "Поддержка",
   "menu.logout": "Выйти",
 
-  "common.not_implemented": "Пока не реализовано"
+  "common.not_implemented": "Пока не реализовано",
+
+  "driving.title": "Поездки",
+  "driving.searching": "Идёт поиск заказов…"
 }

@@ -383,5 +383,46 @@ class DriverApi {
         .timeout(const Duration(seconds: 30));
     return (res is Map<String, dynamic>) ? res : <String, dynamic>{'status': 'ERROR'};
   }
+
+  static Future<Map<String, dynamic>> startDriving({
+    required double lat,
+    required double lng,
+    double? heading,   // градусы 0..359 (если есть)
+    double? accuracy,  // метры (если есть)
+  }) {
+    return ApiService.callAndDecode('start_driving', {
+      'lat': lat,
+      'lng': lng,
+      if (heading != null)  'heading': heading,
+      if (accuracy != null) 'accuracy': accuracy,
+    });
+  }
+  static Future<Map<String, dynamic>> stopDriving() {
+    return ApiService.callAndDecode('stop_driving', const {});
+  }
+
+  static Future<Map<String, dynamic>> getOffers() {
+    return ApiService.callAndDecode('get_offers', const {});
+  }
+
+  static Future<Map<String, dynamic>> acceptDrive({
+    required int requestId,
+    required int driveId,
+  }) {
+    return ApiService.callAndDecode('accept_drive', {
+      'request_id': requestId,
+      'drive_id': driveId,
+    });
+  }
+
+  static Future<Map<String, dynamic>> declineDrive({
+    required int requestId,
+    required int driveId,
+  }) {
+    return ApiService.callAndDecode('decline_drive', {
+      'request_id': requestId,
+      'drive_id': driveId,
+    });
+  }
 }
 

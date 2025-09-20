@@ -139,6 +139,7 @@ class _VerificationPageState extends State<VerificationPage> {
       child: Scaffold(
         appBar: BrandHeader(
           showBack: true,
+          onBackTap: () => Navigator.of(context).pop(),
         ),
         body: SafeArea(
           child: Column(

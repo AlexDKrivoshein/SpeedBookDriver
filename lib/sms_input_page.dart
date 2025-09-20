@@ -471,7 +471,7 @@ class _SmsInputPageState extends State<SmsInputPage>
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7FBFB),
-      appBar: const BrandHeader(), // единая шапка
+      appBar: BrandHeader(showBack: true, onBackTap: _goBackToPhone), // единая шапка
       body: Stack(
         children: [
           // ↓ Фон как в phone_input (без масштабирования)
@@ -660,27 +660,6 @@ class _SmsInputPageState extends State<SmsInputPage>
 
                   const SizedBox(height: 16),
                 ],
-              ),
-            ),
-          ),
-
-          // Кнопка «назад» (как была раньше)
-          Positioned(
-            top: 12,
-            left: 12,
-            child: SafeArea(
-              child: Material(
-                color: Colors.white,
-                shape: const CircleBorder(),
-                elevation: 4,
-                child: InkWell(
-                  customBorder: const CircleBorder(),
-                  onTap: _goBackToPhone,
-                  child: const Padding(
-                    padding: EdgeInsets.all(10),
-                    child: Icon(Icons.arrow_back, color: Colors.black87),
-                  ),
-                ),
               ),
             ),
           ),
