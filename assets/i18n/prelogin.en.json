@@ -157,6 +157,8 @@
   "common.not_implemented": "Not implemented yet",
 
   "driving.title": "Driving",
-  "driving.searching": "Searching orders…"
+  "driving.searching": "Searching orders…",
 
+  "common.ok": "Accept",
+  "common.cancel": "Decline"
 }

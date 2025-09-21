@@ -130,22 +130,7 @@
   "verification.photo.take": "ថតរូប",
   "verification.photo.retake": "ថតម្ដងទៀត",
 
-  "home.referral.invite_btn": "Invite via link",
-  "referral.title": "Invite a friend",
-  "referral.subtitle": "Share a link or QR — both of you get a bonus",
-  "referral.generating": "Generating link…",
-  "referral.your_code": "Your code:",
-  "referral.copy_code": "Copy code",
-
-  "referral.copy_link": "Copy link",
-  "referral.qr_title": "Invite QR",
-  "referral.share": "Share",
-  "referral.copied": "Link copied",
-  "referral.error": "Failed to create the link",
-  "referral.share_text": "Join me in SpeedBook: {link}",
-
   "home.referral.invite_btn": "អញ្ជើញតាមតំណភ្ជាប់",
-  "home.referral.your_id": "លេខយោង",
 
   "referral.title": "អញ្ជើញមិត្តភក្តិ",
   "referral.subtitle": "ចែករំលែកតំណភ្ជាប់ ឬ QR — អ្នកទាំងពីរគ្រប់គ្នានឹងទទួលបានរង្វាន់បន្ថែម",
@@ -172,5 +157,8 @@
   "common.not_implemented": "មិនទាន់អនុវត្តទេ",
 
   "driving.title": "ការបើកបរ",
-  "driving.searching": "កំពុងស្វែងរកការបញ្ជាទិញ…"
+  "driving.searching": "កំពុងស្វែងរកការបញ្ជាទិញ…",
+
+  "common.ok": "ទទួលយក",
+  "common.cancel": "បដិសេធ"
 }

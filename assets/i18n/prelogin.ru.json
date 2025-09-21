@@ -156,5 +156,8 @@
   "common.not_implemented": "Пока не реализовано",
 
   "driving.title": "Поездки",
-  "driving.searching": "Идёт поиск заказов…"
+  "driving.searching": "Идёт поиск заказов…",
+
+  "common.ok": "Принять",
+  "common.cancel": "Отказать"
 }
