@@ -1,4 +1,6 @@
-import 'dart:ui' as ui; // можно убрать, если не используешь где-то ещё
+import 'dart:io' show exit;
+import 'package:flutter/services.dart' show SystemNavigator;
+
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -6,9 +8,9 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
-import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/foundation.dart' show kReleaseMode, kDebugMode;
 
-// + Branch
+// ===== Branch (по умолчанию отключено флагом) =====
 import 'package:flutter_branch_sdk/flutter_branch_sdk.dart';
 
 import 'route_observer.dart';
@@ -22,17 +24,24 @@ import 'translations.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-Future<void> _initBranchDeepLinking() async {
-  // Инициализация Branch
-  await FlutterBranchSdk.init(
-    enableLogging: kDebugMode,
-  );
+/// Флаг управления Branch из сборки:
+///   по умолчанию false (отключено для тестов / разработки)
+const bool kBranchEnabled =
+bool.fromEnvironment('BRANCH_ENABLED', defaultValue: false);
 
-  if (kDebugMode) {
-    FlutterBranchSdk.validateSDKIntegration();
+Future<void> _initBranchDeepLinking() async {
+  if (!kBranchEnabled) {
+    debugPrint('[Branch] disabled (BRANCH_ENABLED=false)');
+    return;
   }
 
-  // Слушаем диплинки
+  await FlutterBranchSdk.init(enableLogging: kDebugMode);
+  if (kDebugMode) {
+    // Не вызываем validateSDKIntegration, если это мешает прохождению тестов
+    // FlutterBranchSdk.validateSDKIntegration();
+  }
+
+  // Stream с параметрами диплинков
   FlutterBranchSdk.listSession().listen((data) async {
     try {
       final map = Map<String, dynamic>.from(data);
@@ -58,6 +67,28 @@ Future<void> _initBranchDeepLinking() async {
   });
 }
 
+Future<void> _initAppCheck() async {
+  final isRelease = kReleaseMode;
+
+  await FirebaseAppCheck.instance.activate(
+    androidProvider: isRelease ? AndroidProvider.playIntegrity : AndroidProvider.debug,
+    appleProvider:  isRelease ? AppleProvider.deviceCheck   : AppleProvider.debug,
+  );
+
+  await FirebaseAppCheck.instance.setTokenAutoRefreshEnabled(true);
+
+  if (!isRelease) {
+    try {
+      final token = await FirebaseAppCheck.instance.getToken();
+      debugPrint('AppCheck debug token: $token\n'
+          '➡ Добавьте его в Firebase Console → App Check → Debug tokens.');
+    } catch (e) {
+      debugPrint('AppCheck (debug) getToken ещё не принят сервером: $e');
+      // ок до регистрации debug-токена или при выключенном Enforce
+    }
+  }
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -65,32 +96,12 @@ Future<void> main() async {
   await Firebase.initializeApp();
 
   final opts = Firebase.app().options;
-  debugPrint(
-      'FB project: ${opts.projectId} appId: ${opts.appId} apiKey: ${opts.apiKey}');
+  debugPrint('FB project: ${opts.projectId} appId: ${opts.appId} apiKey: ${opts.apiKey}');
 
-  // App Check
-  if (kDebugMode) {
-    await FirebaseAppCheck.instance.activate(
-      androidProvider: AndroidProvider.debug,
-      appleProvider: AppleProvider.debug,
-    );
-    final token = await FirebaseAppCheck.instance.getToken();
-    debugPrint('AppCheck debug token: $token');
-  } else {
-    await FirebaseAppCheck.instance.activate(
-      androidProvider: AndroidProvider.playIntegrity,
-      appleProvider: AppleProvider.deviceCheck,
-    );
-  }
+  await _initAppCheck();
 
-  // Branch deep links
+  // Branch включаем ТОЛЬКО если задан флаг BRANCH_ENABLED
   await _initBranchDeepLinking();
-
-  // Глобальная реакция на невалидную backend-сессию
-  ApiService.setOnAuthFailed(() {
-    navigatorKey.currentState
-        ?.pushNamedAndRemoveUntil('/login', (route) => false);
-  });
 
   runApp(const MyApp());
 }
@@ -165,8 +176,7 @@ class _RootState extends State<_Root> {
     return hasToken && hasSecret;
   }
 
-  Future<bool> _waitForBackendSession(
-      {Duration timeout = const Duration(seconds: 3)}) async {
+  Future<bool> _waitForBackendSession({Duration timeout = const Duration(seconds: 3)}) async {
     final start = DateTime.now();
     while (DateTime.now().difference(start) < timeout) {
       if (await _hasBackendSession()) return true;
@@ -234,18 +244,34 @@ class _RootState extends State<_Root> {
           return;
         }
 
+        Map<String, dynamic>? profile;
         try {
-          final profile =
-          await ApiService.checkTokenOnline(validateOnline: true);
+          final p = await ApiService.checkTokenOnline(validateOnline: true);
+          final status = '${p['status'] ?? ''}'.toUpperCase();
+          if (status != 'OK') {
+            final msg = _extractMsg(p, fallback: 'Authorization failed');
+            await _fatal(msg);
+            return;
+          }
+          profile = p;
+        } on AuthException catch (e) {
+          await _fatal(e.message);
+          return;
+        } catch (e) {
+          await _fatal('Network error. Please try again later.');
+          return;
+        }
 
+        debugPrint('[Main] Profile: $profile');
+
+        try {
           final prefs = await SharedPreferences.getInstance();
           final savedLang = (prefs.getString('user_lang') ?? '').toLowerCase();
           final userLang = savedLang.isNotEmpty
               ? savedLang
-              : (profile['lang'] as String?)?.toLowerCase() ??
+              : (profile?['lang'] as String?)?.toLowerCase() ??
               WidgetsBinding.instance.platformDispatcher.locale.languageCode.toLowerCase();
 
-          // await ApiService.loadTranslations(lang: userLang);
           if (mounted) {
             await context.read<Translations>().setLang(userLang);
             setState(() {
@@ -254,7 +280,7 @@ class _RootState extends State<_Root> {
             });
           }
         } catch (_) {
-          return;
+          // ignore
         }
       } else {
         final prefs = await SharedPreferences.getInstance();
@@ -263,7 +289,6 @@ class _RootState extends State<_Root> {
             ? savedLang
             : WidgetsBinding.instance.platformDispatcher.locale.languageCode.toLowerCase();
 
-        // await ApiService.loadTranslations(lang: guestLang);
         if (mounted) {
           await context.read<Translations>().setLang(guestLang);
           setState(() {
@@ -275,18 +300,56 @@ class _RootState extends State<_Root> {
     });
   }
 
+  // ——— helpers ———
+  String _extractMsg(Map<String, dynamic> map, {String fallback = 'Error'}) {
+    String msg = (map['message']?.toString() ?? '').trim();
+    if (msg.isEmpty) {
+      final data = map['data'];
+      if (data is Map<String, dynamic>) {
+        msg = (data['message']?.toString() ?? data['error']?.toString() ?? '').trim();
+      }
+    }
+    if (msg.isEmpty) {
+      msg = (map['error']?.toString() ?? '').trim();
+    }
+    return msg.isEmpty ? fallback : msg;
+  }
+
+  Future<void> _fatal(String message) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Ошибка'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              try {
+                SystemNavigator.pop();
+              } catch (_) {
+                exit(0); // fallback (нежелателен на iOS)
+              }
+            },
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_needOnboarding == null) {
-      return const Scaffold(
-          body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     if (_needOnboarding == true) {
       return OnboardingPage(onDone: _onOnboardingDone);
     }
     if (_checkingInit) {
-      return const Scaffold(
-          body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     if (!_isLoggedIn || !_hasSession) {

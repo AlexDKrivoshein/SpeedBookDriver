@@ -6,7 +6,7 @@
   "onboarding.continue": "Continue",
   "onboarding.skip": "Not now",
 
-  "phone.hero.prefix": "Making traveling in Cambodia comfortable and safe at the best price with ",
+  "phone.hero.prefix": "Smarter routes, safer rides, better pay with ",
   "phone.hero.brand": "SpeedBook!",
   "phone.hint": "Mobile number",
   "phone.register": "Register",
@@ -46,20 +46,21 @@
   "home.verification.verified": "Verified",
   "home.verification.rejected": "Rejected",
   "home.verification.rejected_reason": "Reason",
-  "home.referral.title": "Add referral",
-  "home.referral.id_label": "Referral ID",
+  "home.referral.title": "Invitee code",
+  "home.referral.id_label": "Enter referral code",
   "home.referral.attach": "Attach",
   "home.referral.success": "Referral attached",
   "home.referral.enter_id": "Enter referral ID",
   "home.referral.error": "Failed to attach",
   "home.referral.current_prefix": "Referred by",
-  "home.referral.your_id": "Referral ID",
+  "home.referral.your_id": "My ID",
 
   "home.car.title": "Vehicle",
   "home.car.add": "Add car",
   "home.car.number": "Number",
   "home.car.brand": "Brand",
   "home.car.model": "Model",
+  "home.car.color": "Color",
   "home.car.book_rental": "Book rental car",
 
   "drive.start": "Start driving",
@@ -160,5 +161,17 @@
   "driving.searching": "Searching orders…",
 
   "common.ok": "Accept",
-  "common.cancel": "Decline"
+  "common.decline": "Decline",
+
+  "menu.delete_account": "Delete my account",
+  "delete_account.title": "⚠️ Attention!",
+  "delete_account.intro": "Deleting your account is permanent and cannot be undone.",
+  "delete_account.b1": "Your account will be permanently deleted and cannot be restored.",
+  "delete_account.b2": "All ride data and trip history will be removed.",
+  "delete_account.b3": "All transaction records, balances and accounts will be deleted.",
+  "delete_account.b4": "Referral connections will be lost.",
+  "delete_account.b5": "All accumulated bonuses and discounts will be voided.",
+  "delete_account.b6": "Your driver rating will be lost.",
+  "common.cancel": "Cancel",
+  "common.delete": "Delete"
 }

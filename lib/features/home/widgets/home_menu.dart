@@ -22,6 +22,7 @@ class HomeMenu extends StatelessWidget {
     required this.onOpenSupport,
     required this.onPickLanguage,
     required this.onLogout,
+    required this.onDeleteAccount,
   });
 
   final DriverDetails details;
@@ -34,6 +35,7 @@ class HomeMenu extends StatelessWidget {
   final VoidCallback onOpenSupport;
   final Future<void> Function(BuildContext) onPickLanguage;
   final Future<void> Function(BuildContext) onLogout;
+  final Future<void> Function(BuildContext) onDeleteAccount;
 
   @override
   Widget build(BuildContext context) {
@@ -151,6 +153,20 @@ class HomeMenu extends StatelessWidget {
                   onPressed: () => onLogout(context),
                   icon: const Icon(Icons.logout),
                   label: Text(t(context, 'menu.logout')),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+              child: SizedBox(
+                width: double.infinity,
+                child: TextButton.icon(
+                  onPressed: () => onDeleteAccount(context),
+                  icon: const Icon(Icons.delete_forever, color: Colors.red),
+                  label: const Text(
+                    'Delete my account',
+                    style: TextStyle(color: Colors.red),
+                  ),
                 ),
               ),
             ),

@@ -27,10 +27,6 @@ class ApiService {
   static const int _maxAttempts = 5;
   static const int _timeoutSeconds = 8;
 
-  static bool _isTransient(Object e) =>
-      e is SocketException || e is TimeoutException;
-
-  /// Ретрай по 429 и любым 5xx
   static bool _shouldRetryStatus(int code) =>
       code == 429 || (code >= 500 && code < 600);
 
@@ -44,12 +40,10 @@ class ApiService {
     onAuthFailed = callback;
   }
 
-  // ==== каналы/переводы/состояние ====
   static const MethodChannel _channel = MethodChannel('com.speedbook.taxidriver/config');
 
   static Map<String, String> _translations = {};        // сетевые переводы
   static Map<String, String> _translationsLocal = {};   // локальные из assets (prelogin)
-  static bool _loadingTranslationsNow = false;
   static bool _preloginLoaded = false;
   static String? _appSystemName;
 
@@ -65,8 +59,6 @@ class ApiService {
     final missing = token == null || token.isEmpty || secret == null || secret.isEmpty;
     if (missing) {
       debugPrint('[ApiService] Token not found, validate: $validateOnline');
-      // В «мягком» режиме(по умолчанию) не вызываем onAuthFailed, чтобы не зациклиться (например, при загрузке переводов)
-//      await FirebaseAuth.instance.signOut();
       if (validateOnline) {
         debugPrint('[ApiService] Handle invalid token');
         await _handleInvalidToken('Missing token or secret');
@@ -79,6 +71,7 @@ class ApiService {
       if (apiUrl == null) {
         await _handleInvalidToken('API URL not available');
       }
+
       final resp = await http.post(
         Uri.parse('$apiUrl/api/validate_token'),
         headers: {
@@ -87,27 +80,62 @@ class ApiService {
         },
       );
 
+      // 1) Проверяем HTTP-статус
       if (resp.statusCode != 200) {
-        debugPrint('[ApiService] Token not valid!');
-        await _handleInvalidToken('Token validation failed');
-      } else {
-        debugPrint('[ApiService] Token valid');
+        debugPrint('[ApiService] Token not valid! HTTP ${resp.statusCode}');
+        await _handleInvalidToken('Token validation failed (HTTP ${resp.statusCode})');
+      }
+
+      // 2) Парсим JSON и требуем status == "OK"
+      try {
+        final dynamic parsed = jsonDecode(resp.body);
+        if (parsed is! Map<String, dynamic>) {
+          await _handleInvalidToken('Invalid validation response format');
+        }
+        final map = parsed as Map<String, dynamic>;
+        final status = (map['status'] ?? '').toString().toUpperCase();
+
+        if (status != 'OK') {
+          // Достаём человекочитаемое сообщение
+          String message =
+          (map['message']?.toString() ?? '').trim();
+          if (message.isEmpty) {
+            final data = map['data'];
+            if (data is Map<String, dynamic>) {
+              message = (data['message']?.toString() ??
+                  data['error']?.toString() ??
+                  '').trim();
+            }
+          }
+          if (message.isEmpty) {
+            message = (map['error']?.toString() ?? 'Token validation failed').trim();
+          }
+
+          debugPrint('[ApiService] Token not valid! status=$status, message="$message"');
+          await _handleInvalidToken(message);
+        } else {
+          debugPrint('[ApiService] Token valid (status=OK)');
+        }
+      } catch (e) {
+        debugPrint('[ApiService] Token validation parse error: $e');
+        await _handleInvalidToken('Token validation parse error');
       }
     }
+
     return token!;
   }
 
   static Future<Map<String, dynamic>> checkTokenOnline({bool validateOnline = true}) async {
-    // Локальная проверка
+
     debugPrint('[ApiService] Check token, validate: $validateOnline');
     await _ensureValidToken(validateOnline: validateOnline);
 
     if (!validateOnline) return {};
 
-    // Через общий слой (ретраи+timeout)
-    final decoded = await callPlain('auth/check_token', const {}, validateOnline: true);
+    final decoded = await callAndDecode('check_customer', const {}, validateOnline: true);
+
     if (decoded is! Map<String, dynamic>) {
-      throw StateError('Invalid /auth/check_token response');
+      throw StateError('Invalid check_customer response');
     }
     return decoded;
   }

@@ -6,7 +6,7 @@
   "onboarding.continue": "Продолжить",
   "onboarding.skip": "Не сейчас",
 
-  "phone.hero.prefix": "Сделаем поездки по Камбодже комфортными и безопасными по лучшей цене вместе с ",
+  "phone.hero.prefix": "Умные маршруты, безопасные поездки, больше дохода c ",
   "phone.hero.brand": "SpeedBook!",
   "phone.hint": "Номер телефона",
   "phone.register": "Зарегистрироваться",
@@ -46,19 +46,20 @@
   "home.verification.verified": "Верифицирован",
   "home.verification.rejected": "Верификация отклонена",
   "home.verification.rejected_reason": "Причина",
-  "home.referral.title": "Добавить реферала",
-  "home.referral.id_label": "ID реферала",
+  "home.referral.title": "Пригласительный код",
+  "home.referral.id_label": "Введите реферальный код",
   "home.referral.attach": "Подключить",
   "home.referral.success": "Реферал успешно подключён",
   "home.referral.enter_id": "Введите ID реферала",
   "home.referral.error": "Не удалось подключить",
   "home.referral.current_prefix": "Пригласил",
-  "home.referral.your_id": "Referral ID",
+  "home.referral.your_id": "Мой ID",
   "home.car.title": "Машина",
   "home.car.add": "Добавить машину",
   "home.car.number": "Номер",
   "home.car.brand": "Марка",
   "home.car.model": "Модель",
+  "home.car.color": "Цвет",
   "home.car.book_rental": "Арендовать машину",
 
   "drive.start": "Начать смену",
@@ -159,5 +160,17 @@
   "driving.searching": "Идёт поиск заказов…",
 
   "common.ok": "Принять",
-  "common.cancel": "Отказать"
+  "common.decline": "Отказать",
+
+  "menu.delete_account": "Удалить мой аккаунт",
+  "delete_account.title": "⚠️ Внимание!",
+  "delete_account.intro": "Удаление аккаунта необратимо и не может быть отменено.",
+  "delete_account.b1": "Ваш аккаунт будет удалён навсегда и не подлежит восстановлению.",
+  "delete_account.b2": "Будут удалены все данные и история поездок.",
+  "delete_account.b3": "Будут удалены все записи о транзакциях, балансы и счета.",
+  "delete_account.b4": "Реферальные связи будут потеряны.",
+  "delete_account.b5": "Все накопленные бонусы и скидки будут аннулированы.",
+  "delete_account.b6": "Ваш рейтинг водителя будет потерян.",
+  "common.cancel": "Отмена",
+  "common.delete": "Удалить"
 }

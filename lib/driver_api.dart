@@ -34,10 +34,12 @@ class DriverDetails {
   final String? rejectionReason;
   final String? referal;
   final bool canAddReferal;
-  final int? carId;     // id машины
-  final String? number; // номерной знак
-  final String? brand;  // марка
-  final String? model;  // модель
+  final int? carId;
+  final String? number;
+  final String? brand;
+  final String? model;
+  final String? color;
+  final String? vehicleType;
   final String? carClass;
   final String? carReason;
 
@@ -55,6 +57,8 @@ class DriverDetails {
     this.number,
     this.brand,
     this.model,
+    this.color,
+    this.vehicleType,
     this.carClass,
     this.carReason,
   });
@@ -83,6 +87,8 @@ class DriverDetails {
       number: root['number'],
       brand: root['brand'],
       model: root['model'],
+      color: root['color'],
+      vehicleType: root['vehicle_type'],
       carClass: root['car_class'],
       carReason: root['car_reason'],
     );

@@ -6,7 +6,7 @@
   "onboarding.continue": "បន្ត",
   "onboarding.skip": "មិនមែនឥឡូវនេះ",
 
-  "phone.hero.prefix": "ធ្វើឱ្យការធ្វើដំណើរនៅកម្ពុជា មានផាសុខភាព និងមានសុវត្ថិភាព ក្នុងតម្លៃល្អបំផុត ជាមួយ ",
+  "phone.hero.prefix": "ផ្លូវឆ្លាតវៃជាងមុន, ជិះកាន់តែសុវត្ថិភាព, ប្រាក់ចំណូលកាន់តែល្អ ជាមួយ ",
   "phone.hero.brand": "SpeedBook!",
   "phone.hint": "លេខទូរស័ព្ទ",
   "phone.register": "ចុះឈ្មោះ",
@@ -46,8 +46,8 @@
   "home.verification.verified": "បានផ្ទៀងផ្ទាត់",
   "home.verification.rejected": "បានបដិសេធការផ្ទៀងផ្ទាត់",
   "home.verification.rejected_reason": "ហេតុផល",
-  "home.referral.title": "បន្ថែមអ្នកណែនាំ",
-  "home.referral.id_label": "លេខសម្គាល់អ្នកណែនាំ",
+  "home.referral.title": "កូដអ្នកទទួលការអញ្ជើញ",
+  "home.referral.id_label": "បញ្ចូលលេខកូដយោង",
   "home.referral.attach": "ភ្ជាប់",
   "home.referral.success": "ភ្ជាប់អ្នកណែនាំបានជោគជ័យ",
   "home.referral.enter_id": "បញ្ចូលលេខសម្គាល់អ្នកណែនាំ",
@@ -60,6 +60,7 @@
   "home.car.number": "លេខ",
   "home.car.brand": "ម៉ាក",
   "home.car.model": "ម៉ូដែល",
+  "home.car.color": "ពណ៌",
   "home.car.book_rental": "ជួលរថយន្ត",
 
   "drive.start": "ចាប់ផ្តើមបើកបរ",
@@ -160,5 +161,17 @@
   "driving.searching": "កំពុងស្វែងរកការបញ្ជាទិញ…",
 
   "common.ok": "ទទួលយក",
-  "common.cancel": "បដិសេធ"
+  "common.decline": "បដិសេធ",
+
+  "menu.delete_account": "លុបគណនីរបស់ខ្ញុំ",
+  "delete_account.title": "⚠️ ការប្រុងប្រយ័ត្ន!",
+  "delete_account.intro": "ការលុបគណនីរបស់អ្នកគឺជាអចិន្ត្រៃយ៍ ហើយមិនអាចត្រឡប់វិញបានទេ។",
+  "delete_account.b1": "គណនីរបស់អ្នកនឹងត្រូវបានលុបជាអចិន្ត្រៃយ៍ ហើយមិនអាចស្តារឡើងវិញបានទេ។",
+  "delete_account.b2": "ទិន្នន័យ និងប្រវត្តិការធ្វើដំណើរទាំងអស់នឹងត្រូវបានលុប។",
+  "delete_account.b3": "កំណត់ត្រាប្រតិបត្តិការទាំងអស់ សមតុល្យ និងគណនីនឹងត្រូវបានលុប។",
+  "delete_account.b4": "ការតភ្ជាប់រ៉េហ្វឺរ៉ាល់ទាំងអស់នឹងត្រូវបាត់បង់។",
+  "delete_account.b5": "បូណស និងការបញ្ចុះតម្លៃដែលបានប្រមូលផ្តុំទាំងអស់ នឹងអស់សុពលភាព។",
+  "delete_account.b6": "ពិន្ទុវាយតម្លៃអ្នកបើកបររបស់អ្នក នឹងត្រូវបាត់បង់។",
+  "common.cancel": "បោះបង់",
+  "common.delete": "លុប"
 }

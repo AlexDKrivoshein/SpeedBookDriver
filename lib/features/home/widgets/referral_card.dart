@@ -44,28 +44,45 @@ class ReferralCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(t('home.referral.title'), style: Theme.of(context).textTheme.titleMedium),
+            Text(t('home.referral.title'),
+                style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
-            TextField(
-              controller: controller,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(
-                labelText: t('home.referral.id_label'),
-                border: const OutlineInputBorder(),
-                prefixIcon: const Icon(Icons.tag),
-              ),
-              maxLength: 12,
-            ),
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerRight,
-              child: FilledButton.icon(
-                onPressed: busy ? null : onAttach,
-                icon: busy
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.link),
-                label: Text(t('home.referral.attach')),
-              ),
+
+            // Поле ввода + кнопка на одном уровне
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: controller,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: t('home.referral.id_label'),
+                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.tag),
+                      // чтобы счётчик не увеличивал высоту карточки
+                      counterText: '',
+                    ),
+                    maxLength: 12,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Кнопка той же высоты, что и TextField ( ~56 )
+                SizedBox(
+                  height: 56,
+                  child: FilledButton.icon(
+                    onPressed: busy ? null : onAttach,
+                    icon: busy
+                        ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                        : const Icon(Icons.link),
+                    label: Text(t('home.referral.attach')),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

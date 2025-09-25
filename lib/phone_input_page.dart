@@ -352,11 +352,11 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
                           children: [
                             _Link(
                               text: t(context, 'phone.terms.link'),
-                              onTap: () => _openUrl('https://example.com/terms'),
+                              onTap: () => _openUrl('https://www,speedbook.com/driverterms.html'),
                             ),
                             _Link(
                               text: t(context, 'phone.privacy.link'),
-                              onTap: () => _openUrl('https://example.com/privacy'),
+                              onTap: () => _openUrl('https://www,speedbook.com/driverprivacy.html'),
                             ),
                           ],
                         ),

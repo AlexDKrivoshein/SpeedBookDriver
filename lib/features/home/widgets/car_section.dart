@@ -7,6 +7,7 @@ class CarSection extends StatelessWidget {
   final String? number;
   final String? brand;
   final String? model;
+  final String? color;       // <-- добавили цвет
 
   /// ID машины из базы — если он есть, показываем кнопку Start driving
   final int? carId;
@@ -33,6 +34,7 @@ class CarSection extends StatelessWidget {
     this.carClass,
     this.carReason,
     this.carId,
+    this.color, // <-- новый параметр
   });
 
   @override
@@ -174,6 +176,8 @@ class CarSection extends StatelessWidget {
                             _kvLine(context, t('home.car.brand'), brand!),
                           if ((model ?? '').isNotEmpty)
                             _kvLine(context, t('home.car.model'), model!),
+                          if ((color ?? '').isNotEmpty)
+                            _colorLine(context, t('home.car.color'), color!),
                         ],
                       ),
                     ],
@@ -225,5 +229,57 @@ class CarSection extends StatelessWidget {
         Text(v, style: theme.textTheme.bodyMedium),
       ],
     );
+  }
+
+  Widget _colorLine(BuildContext context, String k, String value) {
+    final theme = Theme.of(context);
+    final parsed = _parseColor(value);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('$k: ',
+            style: theme.textTheme.bodyMedium
+                ?.copyWith(fontWeight: FontWeight.w600)),
+        if (parsed != null) ...[
+          Container(
+            width: 14,
+            height: 14,
+            margin: const EdgeInsets.only(right: 6),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: theme.dividerColor),
+              color: parsed,
+            ),
+          ),
+        ],
+        Text(value, style: theme.textTheme.bodyMedium),
+      ],
+    );
+  }
+
+  /// Пытаемся распарсить цвет из строки.
+  /// Поддерживаем: #RRGGBB, #AARRGGBB, 0xAARRGGBB, 0xRRGGBB
+  Color? _parseColor(String s) {
+    final v = s.trim();
+    try {
+      if (v.startsWith('#')) {
+        final hex = v.substring(1);
+        if (hex.length == 6) {
+          return Color(int.parse('0xFF$hex'));
+        } else if (hex.length == 8) {
+          return Color(int.parse('0x$hex'));
+        }
+      } else if (v.startsWith('0x') || v.startsWith('0X')) {
+        final hex = v.substring(2);
+        if (hex.length == 6) {
+          return Color(int.parse('0xFF$hex'));
+        } else if (hex.length == 8) {
+          return Color(int.parse('0x$hex'));
+        }
+      }
+    } catch (_) {
+      // игнорируем ошибки парсинга
+    }
+    return null;
   }
 }

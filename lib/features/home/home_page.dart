@@ -15,8 +15,8 @@ import '../../brand_header.dart';
 import '../../route_observer.dart';
 import '../../verification_page.dart';
 
-// экран добавления авто
 import 'add_car_page.dart';
+import 'delete_account.dart';
 
 import 'widgets/background.dart';
 import 'widgets/info_card.dart';
@@ -379,6 +379,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
           },
           onPickLanguage: _pickLanguage,
           onLogout: _logout,
+          onDeleteAccount: deleteAccountFlow,
         ),
         body: Stack(
           children: [
@@ -492,6 +493,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
                     number: d.number,
                     brand: d.brand,
                     model: d.model,
+                    color: d.color,
                     carClass: d.carClass,            // NOCAR | AWAITING | REJECTED
                     carReason: d.carReason,          // причина (если REJECTED)
                     onAddCar: _onAddCar,

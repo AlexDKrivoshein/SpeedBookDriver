@@ -501,7 +501,7 @@ class _DrivingMapPageState extends State<DrivingMapPage>
                       child: OutlinedButton.icon(
                         onPressed: _onDecline,
                         icon: const Icon(Icons.close),
-                        label: Text(t(context, 'common.cancel')),
+                        label: Text(t(context, 'common.decline')),
                       ),
                     ),
                     const SizedBox(width: 12),
