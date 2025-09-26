@@ -9,9 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-
-import 'models/create_route_result.dart';
-import 'models/vehicle_type.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 
 class AuthException implements Exception {
   final String message;
@@ -47,6 +45,17 @@ class ApiService {
   static bool _preloginLoaded = false;
   static String? _appSystemName;
 
+  static Future<String?> _getAppCheckToken() async {
+    try {
+      final token = await FirebaseAppCheck.instance.getToken();
+      if (token == null || token.isEmpty) return null;
+      return token;
+    } catch (e) {
+      debugPrint('[ApiService] AppCheck token error: $e');
+      return null;
+    }
+  }
+
   // ===== Проверка токена =====
   static Future<String> _ensureValidToken({bool validateOnline = false}) async {
     final prefs  = await SharedPreferences.getInstance();
@@ -72,11 +81,14 @@ class ApiService {
         await _handleInvalidToken('API URL not available');
       }
 
+      final _appCheck = await _getAppCheckToken();
+
       final resp = await http.post(
         Uri.parse('$apiUrl/api/validate_token'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
+          if (_appCheck != null) 'X-Firebase-AppCheck': _appCheck,
         },
       );
 
@@ -175,6 +187,7 @@ class ApiService {
     final prefs = await SharedPreferences.getInstance();
     final token  = await _ensureValidToken(validateOnline: validateOnline);
     final secret = prefs.getString('secret')!;
+    final _appCheck = await _getAppCheckToken();
 
     final apiUrl = await _channel.invokeMethod<String>('getApiUrl');
     if (apiUrl == null) {
@@ -195,6 +208,7 @@ class ApiService {
           headers: {
             'Authorization': 'Bearer $token',
             'Content-Type': 'application/json',
+            if (_appCheck != null) 'X-Firebase-AppCheck': _appCheck,
           },
           body: jsonEncode({'jwt': jwt}),
         )

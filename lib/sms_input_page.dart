@@ -179,19 +179,24 @@ class _SmsInputPageState extends State<SmsInputPage>
   }
 
   Future<String?> _getFcmTokenWithPermissions() async {
-    if (Platform.isIOS) {
-      final settings = await FirebaseMessaging.instance.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
-      if (settings.authorizationStatus != AuthorizationStatus.authorized) {
-        return null;
+    try {
+      if (Platform.isIOS) {
+        // НИЧЕГО не спрашиваем у пользователя при логине
+        final settings = await FirebaseMessaging.instance.getNotificationSettings();
+        final auth = settings.authorizationStatus;
+        if (auth == AuthorizationStatus.authorized ||
+            auth == AuthorizationStatus.provisional) {
+          return await FirebaseMessaging.instance.getToken();
+        }
+        return null; // разрешения нет — ок, работаем без токена
       }
-    }
-    return FirebaseMessaging.instance.getToken();
-  }
 
+      // Android: можно попробовать получить токен сразу
+      return await FirebaseMessaging.instance.getToken();
+    } catch (_) {
+      return null;
+    }
+  }
   Future<Map<String, String>> _getDeviceInfo() async {
     final deviceInfo = DeviceInfoPlugin();
     String device = 'unknown';
@@ -260,7 +265,9 @@ class _SmsInputPageState extends State<SmsInputPage>
       final idToken = await user.getIdToken(true);
 
       // 3) Push init / device info
-      await MessagingService.I.init();
+      if (!Platform.isIOS) {
+        await MessagingService.I.init();
+      }
       final deviceInfo = await _getDeviceInfo();
       final fcmToken = await _getFcmTokenWithPermissions();
 
@@ -307,7 +314,7 @@ class _SmsInputPageState extends State<SmsInputPage>
           'platform': platform,
           'locale': currentLocale,
           'app_version': info.version,
-          'fcm_token': fcmToken,
+          if (fcmToken?.isNotEmpty == true) 'fcm_token': fcmToken,
           'is_driver': true,
           'region': userCountry,
           'inviter_id': pendingInviter,
