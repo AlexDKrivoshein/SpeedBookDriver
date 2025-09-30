@@ -173,5 +173,13 @@
   "delete_account.b5": "បូណស និងការបញ្ចុះតម្លៃដែលបានប្រមូលផ្តុំទាំងអស់ នឹងអស់សុពលភាព។",
   "delete_account.b6": "ពិន្ទុវាយតម្លៃអ្នកបើកបររបស់អ្នក នឹងត្រូវបាត់បង់។",
   "common.cancel": "បោះបង់",
-  "common.delete": "លុប"
+  "common.delete": "លុប",
+
+  "driving.start_drive": "ចាប់ផ្តើមដំណើរ",
+  "driving.cancel_drive": "បោះបង់ដំណើរ",
+  "driving.started": "បានចាប់ផ្តើមដំណើរ",
+  "driving.canceled": "បានបោះបង់ដំណើរ",
+
+  "driving.arrived": "បានមកដល់",
+  "driving.arrived_done": "បានសម្គាល់ថាមកដល់"
 }

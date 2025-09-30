@@ -34,9 +34,28 @@ class _DrivingMapPageState extends State<DrivingMapPage>
 
   bool _followMe = true;
   bool _searching = true;
+  bool _stopSent = false;       // уже дергали stop_driving
+  bool _navigatedHome = false;  // уже ушли на home
 
   late final AnimationController _radarCtrl;
   BitmapDescriptor? _carIcon;
+
+  Timer? _drivePollTimer;
+  int? _driveId;
+  Marker? _driverMarker;
+
+  // ===== навигационный режим (добавлено) =====
+  bool _navMode = false;     // включаем в pickup
+  double _navZoom = 17.0;    // комфортный зум
+  double _navTilt = 45.0;    // наклон камеры
+  LatLng? _lastDriverPos;    // предыдущая позиция для bearing
+  bool _actionBusy = false; // блокировка кнопок во время запроса
+
+
+  // терминальные статусы, при которых прекращаем опрос
+  static const Set<String> _terminalStatuses = {
+    'DRIVE_CANCELLED_BY_CUSTOMER', 'DRIVE_CANCELLED_BY_DRIVER', 'DRIVE_FINISHED'
+  };
 
   // оффер/маршрут
   Map<String, dynamic>? _offer;     // data из get_offers
@@ -106,7 +125,8 @@ class _DrivingMapPageState extends State<DrivingMapPage>
     LocationService.I.setDeniedForeverCallback(null);
     _radarCtrl.dispose();
     _offerPolling = false;
-    _callStopDriving();
+    _callStopDriving(navigate: false);
+    _stopDrivePolling();
     super.dispose();
   }
 
@@ -380,19 +400,24 @@ class _DrivingMapPageState extends State<DrivingMapPage>
     return points;
   }
 
-  Future<void> _callStopDriving() async {
+  Future<void> _callStopDriving({bool navigate = true}) async {
+    if (_stopSent) return;
+    _stopSent = true;
+
     try {
       await DriverApi.stopDriving().timeout(const Duration(seconds: 8));
-    } catch (_) {/* ignore */}
-  }
+    } catch (_) {
+      // игнорим сетевые ошибки — главное корректно завершить локально
+    } finally {
+      // локальная остановка циклов
+      _offerPolling = false;
+      _stopDrivePolling();
 
-  void _goHome() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
-    });
+      if (navigate) {
+        await _goHome(); // безопасная навигация (см. ниже)
+      }
+    }
   }
-
   // ========= UI =========
 
   void _showOfferSheet() {
@@ -552,10 +577,10 @@ class _DrivingMapPageState extends State<DrivingMapPage>
       if ((r['status'] ?? '').toString() == 'OK') {
         if (!mounted) return;
         Navigator.of(context).pop(); // закрыть шит
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(t(context, 'common.success'))),
-        );
-        // TODO: перейти на экран активного заказа/навигации
+
+        _driveId = driveId;
+        _startDrivePolling();
+
       } else {
         if (!mounted) return;
         final msg = r['message']?.toString() ?? 'Accept failed';
@@ -601,6 +626,306 @@ class _DrivingMapPageState extends State<DrivingMapPage>
         SnackBar(content: Text(t(context, 'common.network_error'))),
       );
     }
+  }
+
+  // ========= ПОЛЛИНГ ДЕТАЛЕЙ ПОЕЗДКИ =========
+
+  void _startDrivePolling() {
+    _stopDrivePolling(); // на всякий пожарный
+    _drivePollTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      _fetchDriveDetails();
+    });
+    // сделаем первый запрос сразу
+    _fetchDriveDetails();
+  }
+
+  void _stopDrivePolling() {
+    _drivePollTimer?.cancel();
+    _drivePollTimer = null;
+  }
+
+  Future<void> _fetchDriveDetails() async {
+    final did = _driveId;
+    if (did == null) return;
+
+    // берём актуальные координаты: сначала из _currentLatLng, иначе — lastKnown
+    LatLng? pos = _currentLatLng;
+    pos ??= (() {
+      final last = LocationService.I.lastKnownPosition;
+      return last != null ? LatLng(last.latitude, last.longitude) : null;
+    })();
+
+    if (pos == null) {
+      debugPrint('[DrivePoll] skip: no location yet');
+      return;
+    }
+
+    final payload = {
+      'drive_id': did,
+      // важно: ключи именно в таком виде и порядке
+      'lng': pos.longitude,
+      'lat': pos.latitude,
+    };
+
+    try {
+      final reply = await ApiService.callAndDecode(
+        'get_driver_drive_details',
+        payload,
+      ).timeout(const Duration(seconds: 30));
+
+      if (reply['status'] != 'OK') {
+        debugPrint('[DrivePoll] bad status: $reply');
+        return;
+      }
+
+      final data = reply['data'] as Map<String, dynamic>?;
+      debugPrint('[DrivePoll] data: $data');
+      if (data == null) return;
+
+      _applyDriveDetails(data);
+    } catch (e, st) {
+      debugPrint('[DrivePoll] error: $e\n$st');
+    }
+  }
+
+  Future<void> _goHome() async {
+    if (!mounted || _navigatedHome) return;
+    _navigatedHome = true;
+
+    // Закрыть нижние листы/диалоги на корневом навигаторе
+    final rootNav = Navigator.of(context, rootNavigator: true);
+
+    // Небольшая пауза, чтобы закрытия отработали и контекст стабилизировался
+    await Future.delayed(const Duration(milliseconds: 10));
+    if (!mounted) return;
+
+    // Полная замена стека на '/', даже если висит sheet/диалог
+    rootNav.pushNamedAndRemoveUntil('/', (route) => false);
+  }
+
+  void _applyDriveDetails(Map<String, dynamic> data) {
+    final status = (data['status'] ?? '').toString().toUpperCase();
+    final driveId = data['drive_id'];
+    if (driveId is int && _driveId != driveId) {
+      _driveId = driveId;
+    }
+
+    if (status == 'DRIVE_CANCELLED_BY_CUSTOMER' && !_stopSent) {
+      debugPrint('[DrivePoll] cancelled');
+      _callStopDriving(); // fire-and-forget
+    }
+
+    // позиция машины из backend
+    final pos = data['position'] as Map<String, dynamic>?;
+    if (pos != null) {
+      final lat = (pos['lat'] as num?)?.toDouble();
+      final lng = (pos['lng'] as num?)?.toDouble();
+      if (lat != null && lng != null) {
+        _updateDriverMarker(LatLng(lat, lng)); // рисуем иконку машины
+      }
+    }
+
+    // маршрут к подхвату
+    final pickup = data['pickup'] as Map<String, dynamic>?;
+    if (pickup != null) {
+      final enc = pickup['pickup_route']?.toString();
+      if (enc != null && enc.isNotEmpty) {
+        final pts = _decodePolyline(enc);
+        _setPickupPolyline(pts);
+      }
+    }
+
+    // === PICKUP MODE ===
+    if (status == 'DRIVER_FOUND') {
+      _enterPickupMode(); // убрать основной маршрут и маркеры оффера, включить навигацию
+    }
+
+    if (_terminalStatuses.contains(status)) {
+      _stopDrivePolling();
+    }
+
+    setState(() {});
+  }
+
+  Future<void> _onArrivedPressed() async {
+    final did = _driveId;
+    if (did == null || _actionBusy) return;
+
+    setState(() => _actionBusy = true);
+    try {
+      final r = await ApiService.callAndDecode('driver_arrived', {'drive_id': did})
+          .timeout(const Duration(seconds: 15));
+
+      if ((r['status'] ?? '').toString() == 'OK') {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(t(context, 'driving.arrived_done'))),
+        );
+        // дальше едем по обычной логике — поллинг сам подхватит смену статуса
+      } else {
+        if (!mounted) return;
+        final msg = r['message']?.toString() ?? 'Arrived failed';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${t(context, "common.error")}: $msg')),
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(t(context, 'common.network_error'))),
+      );
+    } finally {
+      if (mounted) setState(() => _actionBusy = false);
+    }
+  }
+
+  Future<void> _onStartDrivePressed() async {
+    final did = _driveId;
+    if (did == null || _actionBusy) return;
+    setState(() => _actionBusy = true);
+    try {
+      final r = await ApiService.callAndDecode('start_drive', {'drive_id': did})
+          .timeout(const Duration(seconds: 15));
+      if ((r['status'] ?? '').toString() == 'OK') {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(t(context, 'driving.started') /* или 'Drive started' */)),
+        );
+        // остаёмся в навигации; сервер начнёт отдавать следующий статус,
+        // поллинг продолжает работать
+      } else {
+        if (!mounted) return;
+        final msg = r['message']?.toString() ?? 'Start failed';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${t(context, "common.error")}: $msg')),
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(t(context, 'common.network_error'))),
+      );
+    } finally {
+      if (mounted) setState(() => _actionBusy = false);
+    }
+  }
+
+  Future<void> _onCancelDrivePressed() async {
+    final did = _driveId;
+    if (did == null || _actionBusy) return;
+    setState(() => _actionBusy = true);
+    try {
+      final r = await ApiService.callAndDecode('cancel_drive', {'drive_id': did})
+          .timeout(const Duration(seconds: 15));
+      if ((r['status'] ?? '').toString() == 'OK') {
+        // корректно завершаем локально, останавливаем поллинг и уходим на home
+        await _callStopDriving(); // navigate=true по умолчанию (если ты добавил ранее)
+      } else {
+        if (!mounted) return;
+        final msg = r['message']?.toString() ?? 'Cancel failed';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${t(context, "common.error")}: $msg')),
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(t(context, 'common.network_error'))),
+      );
+    } finally {
+      if (mounted) setState(() => _actionBusy = false);
+    }
+  }
+
+  void _enterPickupMode() {
+    setState(() {
+      // скрыть офферные маркеры и основной маршрут
+      _offer = null;            // оффер больше не нужен на экране
+      _offerMarkers.clear();    // убрать точки from/to
+
+      // оставить только линию 'pickup'
+      const pickupId = PolylineId('pickup');
+      _polylines.removeWhere((p) => p.polylineId != pickupId);
+
+      // включаем навигацию (добавлено)
+      _navMode = true;
+      _followMe = true;
+    });
+  }
+
+  // ========= Маркеры/полилинии =========
+
+  void _updateDriverMarker(LatLng p) async {
+    _lastDriverPos ??= p;
+
+    final marker = Marker(
+      markerId: const MarkerId('driver'),
+      position: p,
+      anchor: const Offset(0.5, 0.5),
+      rotation: _heading, // визуальный поворот иконки (можно заменить на bearing)
+      flat: true,
+      icon: _carIcon ?? BitmapDescriptor.defaultMarker,
+    );
+    setState(() {
+      _driverMarker = marker;
+    });
+
+    // в навигации — ведём камеру за машиной с поворотом по курсу
+    if (_navMode) {
+      final br = _computeBearing(_lastDriverPos!, p);
+      await _moveNavCamera(p, bearing: br);
+    }
+
+    _lastDriverPos = p;
+  }
+
+  void _setPickupPolyline(List<LatLng> points) {
+    const id = PolylineId('pickup');
+    final poly = Polyline(
+      polylineId: id,
+      points: points,
+      width: 6,
+      geodesic: true,
+      startCap: Cap.roundCap,
+      endCap: Cap.roundCap,
+      jointType: JointType.round,
+    );
+    setState(() {
+      _polylines
+        ..removeWhere((p) => p.polylineId == id)
+        ..add(poly);
+    });
+  }
+
+  // ========= Утилиты навигации (добавлено) =========
+
+  // курс из A в B в градусах 0..360
+  double _computeBearing(LatLng a, LatLng b) {
+    final lat1 = a.latitude * math.pi / 180.0;
+    final lat2 = b.latitude * math.pi / 180.0;
+    final dLon = (b.longitude - a.longitude) * math.pi / 180.0;
+    final y = math.sin(dLon) * math.cos(lat2);
+    final x = math.cos(lat1) * math.sin(lat2) -
+        math.sin(lat1) * math.cos(lat2) * math.cos(dLon);
+    final brng = (math.atan2(y, x) * 180.0 / math.pi + 360.0) % 360.0;
+    return brng;
+  }
+
+  Future<void> _moveNavCamera(LatLng pos, {double? bearing}) async {
+    if (!_controller.isCompleted) return;
+    final map = await _controller.future;
+
+    final usedBearing =
+        bearing ?? (_lastDriverPos != null ? _computeBearing(_lastDriverPos!, pos) : _heading);
+
+    final cam = CameraPosition(
+      target: pos,
+      zoom: _navZoom,
+      tilt: _navTilt,
+      bearing: usedBearing,
+    );
+
+    await map.animateCamera(CameraUpdate.newCameraPosition(cam));
   }
 
   // ---------- безопасные парсеры ----------
@@ -678,7 +1003,11 @@ class _DrivingMapPageState extends State<DrivingMapPage>
   Widget build(BuildContext context) {
     // объединяем маркеры: машина + оффер
     final Set<Marker> markers = {..._offerMarkers};
-    if (_currentLatLng != null) {
+
+    if (_driverMarker != null) {
+      markers.add(_driverMarker!);          // приоритет — серверная позиция машины
+    } else if (_currentLatLng != null) {
+      // fallback: локальная позиция устройства (как было)
       markers.add(Marker(
         markerId: const MarkerId('me'),
         position: _currentLatLng!,
@@ -716,7 +1045,11 @@ class _DrivingMapPageState extends State<DrivingMapPage>
             onPressed: () async {
               setState(() => _followMe = !_followMe);
               if (_followMe && _currentLatLng != null) {
-                await _maybeMoveCamera(_currentLatLng!, animated: true);
+                if (_navMode) {
+                  await _moveNavCamera(_currentLatLng!);
+                } else {
+                  await _maybeMoveCamera(_currentLatLng!, animated: true);
+                }
               }
             },
             icon: Icon(_followMe ? Icons.location_searching : Icons.my_location),
@@ -741,6 +1074,7 @@ class _DrivingMapPageState extends State<DrivingMapPage>
               }
             },
             onCameraMoveStarted: () {
+              if (_navMode) return; // в навигации не трогаем follow
               if (_followMe) setState(() => _followMe = false);
             },
           ),
@@ -793,8 +1127,7 @@ class _DrivingMapPageState extends State<DrivingMapPage>
                       Text(
                         t(context, 'driving.searching'),
                         style: theme.textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
+                            fontWeight: FontWeight.w600),
                       ),
                     ],
                   ),
@@ -808,6 +1141,37 @@ class _DrivingMapPageState extends State<DrivingMapPage>
                 child: Center(child: CircularProgressIndicator()),
               ),
             ),
+          // === Pickup-Action Bar ===
+          if (_navMode && _driveId != null)
+            Positioned(
+              left: 12,
+              right: 12,
+              bottom: 16,
+              child: SafeArea(
+                top: false,
+                child: Row(
+                  children: [
+                    // ARRIVED — слева (Filled)
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: _actionBusy ? null : _onArrivedPressed,
+                        icon: const Icon(Icons.flag_circle),
+                        label: Text(t(context, 'driving.arrived')),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // CANCEL — справа (Outlined)
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _actionBusy ? null : _onCancelDrivePressed,
+                        icon: const Icon(Icons.close),
+                        label: Text(t(context, 'driving.cancel_drive')),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
@@ -815,7 +1179,11 @@ class _DrivingMapPageState extends State<DrivingMapPage>
         onPressed: () async {
           if (_currentLatLng != null) {
             setState(() => _followMe = true);
-            await _maybeMoveCamera(_currentLatLng!, animated: true);
+            if (_navMode) {
+              await _moveNavCamera(_currentLatLng!);
+            } else {
+              await _maybeMoveCamera(_currentLatLng!, animated: true);
+            }
           }
         },
         child: const Icon(Icons.center_focus_strong),

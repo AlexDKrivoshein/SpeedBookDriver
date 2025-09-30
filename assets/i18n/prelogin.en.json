@@ -173,5 +173,13 @@
   "delete_account.b5": "All accumulated bonuses and discounts will be voided.",
   "delete_account.b6": "Your driver rating will be lost.",
   "common.cancel": "Cancel",
-  "common.delete": "Delete"
+  "common.delete": "Delete",
+
+  "driving.start_drive": "Start drive",
+  "driving.cancel_drive": "Cancel drive",
+  "driving.started": "Drive started",
+  "driving.canceled": "Drive canceled",
+
+  "driving.arrived": "Arrived",
+  "driving.arrived_done": "Marked as arrived"
 }

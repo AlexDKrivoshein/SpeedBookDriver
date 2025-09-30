@@ -46,6 +46,10 @@ class ApiService {
   static String? _appSystemName;
 
   static Future<String?> _getAppCheckToken() async {
+    if (!kReleaseMode) {
+      return null;
+    }
+
     try {
       final token = await FirebaseAppCheck.instance.getToken();
       if (token == null || token.isEmpty) return null;

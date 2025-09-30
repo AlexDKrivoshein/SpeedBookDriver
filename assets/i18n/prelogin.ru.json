@@ -172,5 +172,13 @@
   "delete_account.b5": "Все накопленные бонусы и скидки будут аннулированы.",
   "delete_account.b6": "Ваш рейтинг водителя будет потерян.",
   "common.cancel": "Отмена",
-  "common.delete": "Удалить"
+  "common.delete": "Удалить",
+
+  "driving.start_drive": "Начать поездку",
+  "driving.cancel_drive": "Отменить поездку",
+  "driving.started": "Поездка начата",
+  "driving.canceled": "Поездка отменена",
+
+  "driving.arrived": "Прибыл",
+  "driving.arrived_done": "Отметка о прибытии сохранена"
 }
