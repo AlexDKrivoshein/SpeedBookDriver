@@ -441,5 +441,30 @@ class ApiService {
 
     await loadPreloginTranslations(lang: lang);
   }
+
+  /// Safe int parser: int | num | "123" -> int, иначе 0
+  static int asInt(dynamic v) {
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return int.tryParse(v?.toString() ?? '') ?? 0;
+    // если где-то нужно отличать отсутствие от 0 — можно сделать asIntOrNull
+  }
+
+  /// Safe bool parser: bool | 1/0 | "true"/"1"/"yes" -> bool
+  static bool asBool(dynamic v) {
+    if (v is bool) return v;
+    if (v is num) return v != 0;
+    final s = (v?.toString() ?? '').trim().toLowerCase();
+    return s == 'true' || s == '1' || s == 'yes';
+  }
+
+  // (опционально, если тебе часто нужно)
+  static num asNum(dynamic v) {
+    if (v is num) return v;
+    return num.tryParse(v?.toString() ?? '') ?? 0;
+  }
+
+  static String asString(dynamic v) => v?.toString() ?? '';
+
 }
 

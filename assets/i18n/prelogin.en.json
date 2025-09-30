@@ -176,10 +176,13 @@
   "common.delete": "Delete",
 
   "driving.start_drive": "Start drive",
-  "driving.cancel_drive": "Cancel drive",
-  "driving.started": "Drive started",
   "driving.canceled": "Drive canceled",
-
   "driving.arrived": "Arrived",
-  "driving.arrived_done": "Marked as arrived"
+  "driving.arrived_done": "Marked as arrived",
+  "driving.start": "Start",
+  "driving.started": "Drive started",
+  "driving.cancel_drive": "Cancel drive",
+
+  "driving.finish": "Finish",
+  "driving.finished": "Drive finished"
 }

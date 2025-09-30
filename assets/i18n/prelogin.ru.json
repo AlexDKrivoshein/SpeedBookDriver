@@ -175,10 +175,14 @@
   "common.delete": "Удалить",
 
   "driving.start_drive": "Начать поездку",
-  "driving.cancel_drive": "Отменить поездку",
-  "driving.started": "Поездка начата",
-  "driving.canceled": "Поездка отменена",
 
+  "driving.canceled": "Поездка отменена",
   "driving.arrived": "Прибыл",
-  "driving.arrived_done": "Отметка о прибытии сохранена"
+  "driving.arrived_done": "Отметка о прибытии сохранена",
+  "driving.start": "Старт",
+  "driving.started": "Поездка начата",
+  "driving.cancel_drive": "Отменить поездку",
+
+  "driving.finish": "Завершить",
+  "driving.finished": "Поездка завершена"
 }

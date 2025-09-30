@@ -176,10 +176,13 @@
   "common.delete": "លុប",
 
   "driving.start_drive": "ចាប់ផ្តើមដំណើរ",
-  "driving.cancel_drive": "បោះបង់ដំណើរ",
-  "driving.started": "បានចាប់ផ្តើមដំណើរ",
   "driving.canceled": "បានបោះបង់ដំណើរ",
-
   "driving.arrived": "បានមកដល់",
-  "driving.arrived_done": "បានសម្គាល់ថាមកដល់"
+  "driving.arrived_done": "បានសម្គាល់ថាមកដល់",
+  "driving.start": "ចាប់ផ្តើម",
+  "driving.started": "បានចាប់ផ្តើមដំណើរ",
+  "driving.cancel_drive": "បោះបង់ដំណើរ",
+
+  "driving.finish": "បញ្ចប់",
+  "driving.finished": "ដំណើរបានបញ្ចប់"
 }
