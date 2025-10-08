@@ -748,6 +748,21 @@ class _DrivingMapPageState extends State<DrivingMapPage>
     if (status == 'DRIVE_CANCELLED_BY_CUSTOMER' && !_stopSent) {
       debugPrint('[DrivePoll] cancelled');
       _callStopDriving(); // fire-and-forget
+    } else if (status == 'DRIVER_FOUND' || status == 'DRIVE_ARRIVED') {
+      _enterPickupMode();
+    } else if (status == 'DRIVE_STARTED') {
+      _enterDriveMode();                 // ← гарантируем режим навигации
+    }
+
+    if (!_navMode && _canFinish) {
+      _enterDriveMode();
+    }
+
+    // Мягкое завершение, если бэкенд прислал финальный статус
+    if (status == 'DRIVE_FINISHED') {
+      _stopDrivePolling();
+      _routeId = null;
+      _callStopDriving();                // navigate=true по умолчанию
     }
 
     // позиция машины из backend
@@ -922,6 +937,18 @@ class _DrivingMapPageState extends State<DrivingMapPage>
     });
   }
 
+  void _enterDriveMode() {
+    setState(() {
+      _offer = null;
+      _offerMarkers.clear();
+      _searching = false;
+      _offerPolling = false;
+      _radarCtrl.stop();
+      _navMode = true;   // <-- ключевое
+      _followMe = true;
+    });
+  }
+
   // ========= Маркеры/полилинии =========
 
   void _updateDriverMarker(LatLng p) async {
@@ -1069,6 +1096,9 @@ class _DrivingMapPageState extends State<DrivingMapPage>
     // объединяем маркеры: машина + оффер
     final Set<Marker> markers = {..._offerMarkers};
 
+    final bool _showActionBar =
+        _driveId != null && (_canArrived || _canStart || _canFinish || _canCancel);
+
     if (_driverMarker != null) {
       markers.add(_driverMarker!);          // приоритет — серверная позиция машины
     } else if (_currentLatLng != null) {
@@ -1211,7 +1241,7 @@ class _DrivingMapPageState extends State<DrivingMapPage>
               ),
             ),
           // === Pickup-Action Bar ===
-          if (_navMode && _driveId != null && (_canArrived || _canStart || _canFinish ||   _canCancel))
+          if (_showActionBar)
             Positioned(
               left: 12,
               right: 12,
