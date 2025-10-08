@@ -91,7 +91,7 @@ class _VerificationPageState extends State<VerificationPage> {
 
       final reply = await ApiService
           .callAndDecode('submit_verification', payload)
-          .timeout(const Duration(seconds: 120));
+          .timeout(const Duration(seconds: 300));
 
       final status = (reply is Map ? reply['status'] : null)?.toString().toUpperCase();
 

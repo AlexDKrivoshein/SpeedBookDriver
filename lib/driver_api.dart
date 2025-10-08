@@ -42,6 +42,7 @@ class DriverDetails {
   final String? vehicleType;
   final String? carClass;
   final String? carReason;
+  final int? currentDrive;
 
 
   DriverDetails({
@@ -61,6 +62,7 @@ class DriverDetails {
     this.vehicleType,
     this.carClass,
     this.carReason,
+    this.currentDrive,
   });
 
   factory DriverDetails.fromJson(Map<String, dynamic> json) {
@@ -91,6 +93,7 @@ class DriverDetails {
       vehicleType: root['vehicle_type'],
       carClass: root['car_class'],
       carReason: root['car_reason'],
+      currentDrive: root['current_drive_id'],
     );
   }
 }

@@ -69,6 +69,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
   bool _loading = true;
   String? _error;
   int _currentPage = 0;
+  bool _navigatedToDrive = false;
 
   // --- Referral state ---
   String? _referalName; // к кому привязан
@@ -112,6 +113,12 @@ class _HomePageState extends State<HomePage> with RouteAware {
     _load(); // перезагружаем при возврате
   }
 
+  void _openDrivingWithDriveId(int driveId) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => DrivingMapPage(driveId: driveId)),
+    );
+  }
+
   Future<void> _load() async {
     if (!mounted) return;
     setState(() {
@@ -124,6 +131,12 @@ class _HomePageState extends State<HomePage> with RouteAware {
     try {
       final d = await DriverApi.getDriverDetails()
           .timeout(const Duration(seconds: 15));
+
+      final cd = d.currentDrive;
+      if (!_navigatedToDrive && cd != null && cd > 0) {
+        _navigatedToDrive = true;
+        _openDrivingWithDriveId(cd);
+      }
 
       List<DriverTransaction> tx = [];
       String? txErr;

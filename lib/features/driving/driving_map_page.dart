@@ -17,7 +17,8 @@ String t(BuildContext context, String key) =>
     ApiService.getTranslationForWidget(context, key);
 
 class DrivingMapPage extends StatefulWidget {
-  const DrivingMapPage({super.key});
+  const DrivingMapPage({super.key, this.driveId});
+  final int? driveId;
 
   @override
   State<DrivingMapPage> createState() => _DrivingMapPageState();
@@ -92,16 +93,24 @@ class _DrivingMapPageState extends State<DrivingMapPage>
   @override
   void initState() {
     super.initState();
+    _driveId = widget.driveId;
     WidgetsBinding.instance.addObserver(this);
 
     LocationService.I.setDeniedForeverCallback(_onDeniedForever);
 
-    _radarCtrl =
-    AnimationController(vsync: this, duration: const Duration(seconds: 3))
+    _radarCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 3))
       ..repeat();
 
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadCarIcon());
+    // Если пришли уже с currentDrive — выключим анимацию сразу после первого кадра
+    if (_driveId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _radarCtrl.stop();
+        setState(() => _searching = false);
+      });
+    }
 
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadCarIcon());
     _start();
   }
 
@@ -156,6 +165,15 @@ class _DrivingMapPageState extends State<DrivingMapPage>
   Future<void> _start() async {
     setState(() => _loading = true);
 
+    if (_driveId != null) {
+      _searching = false;         // отключаем поиск
+      _offerPolling = false;      // перестаём поллить офферы
+      _radarCtrl.stop();          // глушим анимацию радара
+      if (_drivePollTimer == null) {
+        _startDrivePolling();     // начинаем поллинг деталей поездки
+      }
+    }
+
     if (!LocationService.I.isRunning) {
       await LocationService.I.start(
         accuracy: LocationAccuracy.high,
@@ -204,6 +222,9 @@ class _DrivingMapPageState extends State<DrivingMapPage>
   /// Однократный вызов start_driving с координатами; при ошибке — возврат на главную
   Future<void> _tryStartDrivingOnce(Position pos) async {
     if (_startSent) return;
+
+    // Уже ведём активную поездку — не включаем "поиск офферов" и не зовём start_driving
+    if (_driveId != null) return;
 
     final double? heading =
     (pos.heading.isFinite && pos.heading >= 0) ? (pos.heading % 360) : null;
@@ -303,9 +324,9 @@ class _DrivingMapPageState extends State<DrivingMapPage>
           }
         }
 
-        await Future.delayed(const Duration(seconds: 1));
+        await Future.delayed(const Duration(seconds: 5));
       } catch (_) {
-        await Future.delayed(const Duration(seconds: 1));
+        await Future.delayed(const Duration(seconds: 5));
       }
     }
   }
