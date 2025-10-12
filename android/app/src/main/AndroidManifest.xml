@@ -40,7 +40,7 @@
         <meta-data android:name="com.google.android.geo.API_KEY" android:value="${GOOGLE_GEO_API_KEY}"/>
         <meta-data android:name="GOOGLE_MAPS_API_KEY" android:value="${GOOGLE_MAPS_API_KEY}"/>
         <meta-data android:name="API_URL" android:value="${API_URL}"/>
-        <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="default_channel" />
+        <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="sbdriver_channel" />
 
         <!-- === ОТКЛЮЧАЕМ Branch auto-init НА ВРЕМЯ ТЕСТОВ === -->
         <provider
