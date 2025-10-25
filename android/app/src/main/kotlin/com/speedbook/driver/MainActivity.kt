@@ -88,15 +88,21 @@ class MainActivity : FlutterActivity() {
     private fun createDefaultNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            // если уже есть — повторное создание просто ничего не сделает
+            val soundUri = android.provider.Settings.System.DEFAULT_NOTIFICATION_URI
+            val audioAttributes = android.media.AudioAttributes.Builder()
+                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION)
+                .build()
+
             val channel = NotificationChannel(
                 DEFAULT_PUSH_CHANNEL_ID,
                 DEFAULT_PUSH_CHANNEL_NAME,
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "SpeedBook push notifications"
+                description = "SpeedBook driver push notifications"
                 enableVibration(true)
                 setShowBadge(true)
+                setSound(soundUri, audioAttributes)
             }
             nm.createNotificationChannel(channel)
         }
