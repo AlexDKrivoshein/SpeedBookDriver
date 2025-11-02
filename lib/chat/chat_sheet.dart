@@ -23,11 +23,11 @@ class _ChatSheetState extends State<ChatSheet> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Ленивый старт поллинга и первичная загрузка
+    // Ленивый старт: если ChatDock уже сделал init(), повторный вызов не критичен.
     if (!_inited) {
       _inited = true;
       final chat = context.read<ChatController>();
-      chat.init(); // повторные вызовы безопасны
+      chat.init(); // идемпотентно: таймер перезапустится корректно
     }
   }
 
@@ -42,10 +42,9 @@ class _ChatSheetState extends State<ChatSheet> {
   Widget build(BuildContext context) {
     final chat = context.watch<ChatController>();
 
-    // Автоскролл при новых сообщениях
+    // Автоскролл к "низу" (reverse:true => offset 0) после любого билда
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scroll.hasClients) return;
-      // Так как reverse:true, низ списка — это offset 0
       _scroll.animateTo(
         0,
         duration: const Duration(milliseconds: 150),
@@ -54,17 +53,23 @@ class _ChatSheetState extends State<ChatSheet> {
     });
 
     return SafeArea(
+      // верхний инсет прячим, низ учитываем (клавиатура)
+      top: false,
       child: Padding(
         padding: EdgeInsets.only(
           bottom: MediaQuery.of(context).viewInsets.bottom,
-          left: 12, right: 12, top: 8,
+          left: 12,
+          right: 12,
+          top: 8,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             // drag handle
             Container(
-              height: 4, width: 40, margin: const EdgeInsets.only(bottom: 8),
+              height: 4,
+              width: 40,
+              margin: const EdgeInsets.only(bottom: 8),
               decoration: BoxDecoration(
                 color: Colors.grey.shade300,
                 borderRadius: BorderRadius.circular(2),
@@ -88,7 +93,7 @@ class _ChatSheetState extends State<ChatSheet> {
                     await chat.loadInitial();
                     _jumpToBottom();
                   },
-                )
+                ),
               ],
             ),
             const SizedBox(height: 8),
@@ -97,10 +102,10 @@ class _ChatSheetState extends State<ChatSheet> {
             Expanded(
               child: ListView.builder(
                 controller: _scroll,
-                reverse: true, // последние снизу — прокрутка как в мессенджерах
+                reverse: true, // последние снизу — привычная прокрутка
                 itemCount: chat.items.length,
                 itemBuilder: (context, index) {
-                  // из-за reverse: показываем с конца
+                  // из-за reverse показываем с конца массива
                   final ChatMessage msg =
                   chat.items[chat.items.length - 1 - index];
                   return _Bubble(msg: msg, isMine: msg.isMine);
@@ -123,7 +128,8 @@ class _ChatSheetState extends State<ChatSheet> {
                         borderRadius: BorderRadius.circular(24),
                       ),
                       contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 12,
+                        horizontal: 16,
+                        vertical: 12,
                       ),
                     ),
                     onSubmitted: (v) async => _send(chat, v),
@@ -143,8 +149,9 @@ class _ChatSheetState extends State<ChatSheet> {
   }
 
   Future<void> _send(ChatController chat, String v) async {
-    if (v.trim().isEmpty) return;
-    await chat.send(v);
+    final text = v.trim();
+    if (text.isEmpty) return;
+    await chat.send(text);
     _controller.clear();
     _scroll.animateTo(
       0,
@@ -171,8 +178,10 @@ class _Bubble extends StatelessWidget {
     final radius = BorderRadius.only(
       topLeft: const Radius.circular(16),
       topRight: const Radius.circular(16),
-      bottomLeft: isMine ? const Radius.circular(16) : const Radius.circular(4),
-      bottomRight: isMine ? const Radius.circular(4) : const Radius.circular(16),
+      bottomLeft:
+      isMine ? const Radius.circular(16) : const Radius.circular(4),
+      bottomRight:
+      isMine ? const Radius.circular(4) : const Radius.circular(16),
     );
 
     // Подпись отправителя (если сервер прислал fromName/toName)

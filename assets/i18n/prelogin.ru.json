@@ -184,5 +184,9 @@
   "driving.cancel_drive": "Отменить поездку",
 
   "driving.finish": "Завершить",
-  "driving.finished": "Поездка завершена"
+  "driving.finished": "Поездка завершена",
+
+  "chat.title": "Чат",
+  "chat.with": "Чат с водителем",
+  "chat.placeholder": "Напишите сообщение…"
 }

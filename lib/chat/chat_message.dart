@@ -1,21 +1,28 @@
 // lib/chat/chat_message.dart
+
+/// Модель одного сообщения чата.
+/// Поддерживает оба формата: старый (числовые from/to)
+/// и новый, где приходят строковые имена ("Me", "+7912...", и т.п.)
 class ChatMessage {
   final int id;
   final DateTime ts;
   final int driveId;
 
-  /// Идентификаторы сторон, если пришли числа
-  final int? from; // прежнее поле, оставляем (может быть null, если пришло имя)
-  final int? to;   // прежнее поле, оставляем (может быть null, если пришло имя)
+  /// Идентификаторы сторон, если сервер прислал числа
+  final int? from;
+  final int? to;
 
-  /// Имена сторон, если сервер вернул строки ("Me" или displayName)
+  /// Имена сторон (строки вроде "Me" или "+7912...")
   final String? fromName;
   final String? toName;
 
+  /// Текст сообщения
   final String text;
+
+  /// Серверный флаг "прочитано"
   final bool isRead;
 
-  /// Новый флаг — серверный признак «моё сообщение»
+  /// Флаг "моё сообщение"
   final bool isMine;
 
   ChatMessage({
@@ -31,51 +38,55 @@ class ChatMessage {
     this.toName,
   });
 
-  /// Безопасный парсер: поддерживает как числовые, так и строковые поля.
+  /// Безопасный парсер: умеет понимать разные типы (int/String/DateTime)
   factory ChatMessage.fromJson(Map<String, dynamic> j) {
-    // ts
+    // --- timestamp ---
     final tsRaw = j['ts'];
-    final ts = (tsRaw is String)
-        ? (DateTime.tryParse(tsRaw) ?? DateTime.now())
-        : (tsRaw is DateTime ? tsRaw : DateTime.now());
+    DateTime ts;
+    if (tsRaw is String) {
+      ts = DateTime.tryParse(tsRaw) ?? DateTime.now();
+    } else if (tsRaw is DateTime) {
+      ts = tsRaw;
+    } else {
+      ts = DateTime.now();
+    }
 
-    // drive_id
-    final driveIdRaw = j['drive_id'];
-    final driveId = (driveIdRaw is num)
-        ? driveIdRaw.toInt()
-        : int.tryParse('${driveIdRaw ?? ''}') ?? 0;
+    // --- drive_id ---
+    final driveRaw = j['drive_id'];
+    final driveId = (driveRaw is num)
+        ? driveRaw.toInt()
+        : int.tryParse('${driveRaw ?? ''}') ?? 0;
 
-    // from / to: могут прийти как int, как строка "Me"/имя, или как числовая строка
+    // --- from / to ---
     final fromRaw = j['from'];
-    final toRaw   = j['to'];
+    final toRaw = j['to'];
 
-    int? _asInt(dynamic v) {
+    int? asInt(dynamic v) {
       if (v is num) return v.toInt();
       if (v is String) return int.tryParse(v);
       return null;
     }
 
-    String? _asStringName(dynamic v) {
+    String? asStringName(dynamic v) {
       if (v == null) return null;
       if (v is String) return v;
-      // если сервер прислал число — имени нет
       return null;
     }
 
-    final int? fromId   = _asInt(fromRaw);
-    final int? toId     = _asInt(toRaw);
-    final String? fromNm = _asStringName(fromRaw);
-    final String? toNm   = _asStringName(toRaw);
+    final fromId = asInt(fromRaw);
+    final toId = asInt(toRaw);
+    final fromNm = asStringName(fromRaw);
+    final toNm = asStringName(toRaw);
 
-    // is_read
+    // --- прочее ---
     final isRead = j['is_read'] == true;
-
-    // is_mine
     final isMine = j['is_mine'] == true;
+    final text = (j['text'] ?? '').toString();
 
-    // id
     final idRaw = j['id'];
-    final id = (idRaw is num) ? idRaw.toInt() : int.tryParse('${idRaw ?? 0}') ?? 0;
+    final id = (idRaw is num)
+        ? idRaw.toInt()
+        : int.tryParse('${idRaw ?? 0}') ?? 0;
 
     return ChatMessage(
       id: id,
@@ -85,9 +96,51 @@ class ChatMessage {
       to: toId,
       fromName: fromNm,
       toName: toNm,
-      text: (j['text'] ?? '').toString(),
+      text: text,
       isRead: isRead,
       isMine: isMine,
     );
   }
+
+  /// Для удобства: копия с изменением одного-двух полей (если понадобится)
+  ChatMessage copyWith({
+    int? id,
+    DateTime? ts,
+    int? driveId,
+    int? from,
+    int? to,
+    String? fromName,
+    String? toName,
+    String? text,
+    bool? isRead,
+    bool? isMine,
+  }) {
+    return ChatMessage(
+      id: id ?? this.id,
+      ts: ts ?? this.ts,
+      driveId: driveId ?? this.driveId,
+      from: from ?? this.from,
+      to: to ?? this.to,
+      fromName: fromName ?? this.fromName,
+      toName: toName ?? this.toName,
+      text: text ?? this.text,
+      isRead: isRead ?? this.isRead,
+      isMine: isMine ?? this.isMine,
+    );
+  }
+
+  @override
+  String toString() =>
+      'ChatMessage(id: $id, text: "$text", from: $fromName, mine: $isMine, read: $isRead)';
+
+  @override
+  bool operator ==(Object other) =>
+      other is ChatMessage &&
+          other.id == id &&
+          other.driveId == driveId &&
+          other.text == text &&
+          other.ts == ts;
+
+  @override
+  int get hashCode => Object.hash(id, driveId, text, ts);
 }

@@ -22,12 +22,27 @@ import 'permission_helper.dart';
 import 'onboarding_page.dart';
 import 'translations.dart';
 
+// ★ NEW: Firebase Messaging + локальные уведомления
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 /// Флаг управления Branch из сборки:
 ///   по умолчанию false (отключено для тестов / разработки)
 const bool kBranchEnabled =
 bool.fromEnvironment('BRANCH_ENABLED', defaultValue: false);
+
+// ★ NEW: Канал уведомлений — должен совпадать с нативным (MainActivity/Manifest)
+const AndroidNotificationChannel kDefaultAndroidChannel = AndroidNotificationChannel(
+  'sbdriver_channel',
+  'General notifications',
+  description: 'SpeedBook push notifications',
+  importance: Importance.high,
+);
+
+// ★ NEW: Плагин локальных уведомлений (foreground)
+final FlutterLocalNotificationsPlugin _fln = FlutterLocalNotificationsPlugin();
 
 Future<void> _initBranchDeepLinking() async {
   if (!kBranchEnabled) {
@@ -37,11 +52,9 @@ Future<void> _initBranchDeepLinking() async {
 
   await FlutterBranchSdk.init(enableLogging: kDebugMode);
   if (kDebugMode) {
-    // Не вызываем validateSDKIntegration, если это мешает прохождению тестов
     // FlutterBranchSdk.validateSDKIntegration();
   }
 
-  // Stream с параметрами диплинков
   FlutterBranchSdk.listSession().listen((data) async {
     try {
       final map = Map<String, dynamic>.from(data);
@@ -84,8 +97,108 @@ Future<void> _initAppCheck() async {
           '➡ Добавьте его в Firebase Console → App Check → Debug tokens.');
     } catch (e) {
       debugPrint('AppCheck (debug) getToken ещё не принят сервером: $e');
-      // ок до регистрации debug-токена или при выключенном Enforce
     }
+  }
+}
+
+// ★ NEW: Инициализация уведомлений (канал, разрешения, поведение iOS в foreground)
+Future<void> _initNotifications() async {
+  // Локальные уведомления
+  const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+  const iosInit = DarwinInitializationSettings();
+  await _fln.initialize(const InitializationSettings(android: androidInit, iOS: iosInit));
+
+  // Создадим канал и с Flutter-стороны (на случай, если нативный ещё не успел)
+  await _fln
+      .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+      ?.createNotificationChannel(kDefaultAndroidChannel);
+
+  // Запросим разрешения (Android 13+ и iOS)
+  final settings = await FirebaseMessaging.instance.requestPermission(
+    alert: true, badge: true, sound: true, provisional: false,
+  );
+  debugPrint('[FCM] permission: ${settings.authorizationStatus}');
+
+  // iOS: показывать баннер/звук, даже когда приложение активно
+  await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
+    alert: true, badge: true, sound: true,
+  );
+}
+
+// ★ NEW: Показ локального уведомления (используется для foreground и data-only кейсов)
+Future<void> _showLocalNotification({
+  String? title,
+  String? body,
+  Map<String, dynamic>? data,
+}) async {
+  if (title == null && body == null) return;
+
+  await _fln.show(
+    DateTime.now().millisecondsSinceEpoch ~/ 1000,
+    title,
+    body,
+    NotificationDetails(
+      android: AndroidNotificationDetails(
+        kDefaultAndroidChannel.id,
+        kDefaultAndroidChannel.name,
+        channelDescription: kDefaultAndroidChannel.description,
+        importance: Importance.high,
+        priority: Priority.high,
+        playSound: true,
+        enableVibration: true,
+      ),
+      iOS: const DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+      ),
+    ),
+    payload: data == null || data.isEmpty ? null : data.toString(),
+  );
+}
+
+// ★ NEW: Фоновый обработчик data-сообщений (Android), когда приложение убито/в фоне
+@pragma('vm:entry-point')
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+
+  // Для notification-пушей система сама показывает баннер.
+  // Для data-only можно при желании показать локальное уведомление:
+  final notif = message.notification;
+  final data = message.data;
+
+  if (notif == null && (data['title'] != null || data['body'] != null)) {
+    // Минимальная инициализация плагина в изоляте
+    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const iosInit = DarwinInitializationSettings();
+    final tempFln = FlutterLocalNotificationsPlugin();
+    await tempFln.initialize(const InitializationSettings(android: androidInit, iOS: iosInit));
+    await tempFln
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(kDefaultAndroidChannel);
+
+    await tempFln.show(
+      DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      data['title'],
+      data['body'],
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          kDefaultAndroidChannel.id,
+          kDefaultAndroidChannel.name,
+          channelDescription: kDefaultAndroidChannel.description,
+          importance: Importance.high,
+          priority: Priority.high,
+          playSound: true,
+          enableVibration: true,
+        ),
+        iOS: const DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        ),
+      ),
+      payload: data.isEmpty ? null : data.toString(),
+    );
   }
 }
 
@@ -95,15 +208,60 @@ Future<void> main() async {
   await ApiService.loadPreloginTranslations();
   await Firebase.initializeApp();
 
+  // ★ NEW: Зарегистрировать фоновый обработчик до runApp
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+
   final opts = Firebase.app().options;
   debugPrint('FB project: ${opts.projectId} appId: ${opts.appId} apiKey: ${opts.apiKey}');
 
   await _initAppCheck();
 
+  // ★ NEW: Инициализируем уведомления/разрешения/канал
+  await _initNotifications();
+
   // Branch включаем ТОЛЬКО если задан флаг BRANCH_ENABLED
   await _initBranchDeepLinking();
 
+  // ★ NEW: Слушатель foreground-сообщений — показываем локальный баннер в активном приложении
+  FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
+    final notif = message.notification;
+    final data = message.data;
+
+    final title = notif?.title ?? data['title'];
+    final body  = notif?.body  ?? data['body'];
+
+    await _showLocalNotification(title: title, body: body, data: data);
+
+    // Доп. логика обновления UI (счётчики, чат и т.п.) — по необходимости
+    debugPrint('[FCM] foreground message: notif=$notif data=$data');
+  });
+
+  // ★ NEW: Клик по уведомлению, когда приложение в фоне → открывается
+  FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+    debugPrint('[FCM] onMessageOpenedApp: ${message.data}');
+    // Пример: навигация по payload
+    _handleNotificationNavigation(message.data);
+  });
+
+  // ★ NEW: Случай, когда приложение открыли "холодным стартом" тапом по пушу
+  final initialMsg = await FirebaseMessaging.instance.getInitialMessage();
+  if (initialMsg != null) {
+    debugPrint('[FCM] getInitialMessage: ${initialMsg.data}');
+    _handleNotificationNavigation(initialMsg.data);
+  }
+
   runApp(const MyApp());
+}
+
+// ★ NEW: Простая маршрутизация по клику (доработай под свои экраны)
+void _handleNotificationNavigation(Map<String, dynamic> data) {
+  // Например, если приходит drive_id — открыть экран заказа
+  final driveId = int.tryParse('${data['drive_id'] ?? ''}');
+  if (driveId != null) {
+    //navigatorKey.currentState?.pushNamed('/');
+    navigatorKey.currentState?.pushNamed('/drive', arguments: driveId, );
+    // Или navigatorKey.currentState?.pushNamed('/drive', arguments: driveId);
+  }
 }
 
 class MyApp extends StatelessWidget {

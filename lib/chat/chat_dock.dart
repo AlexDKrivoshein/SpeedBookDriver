@@ -1,111 +1,142 @@
-// lib/chat/chat_dock.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-// Импорты вашего чата (оставь как у тебя): ChatController, ChatSheet
-import 'index.dart' show ChatController, ChatSheet;
+import 'chat_controller.dart';
+import 'chat_sheet.dart';
 
+/// Плавающая кнопка чата с бейджем непрочитанных (внутри FAB).
 class ChatDock extends StatefulWidget {
-  const ChatDock({
-    super.key,
-    required this.driveId,
-    this.tooltip = 'Chat',
-    this.icon = Icons.chat_bubble_outline,
-    this.badgeColor = Colors.red,
-    this.badgeTextColor = Colors.white,
-  });
-
   final int driveId;
-  final String tooltip;
-  final IconData icon;
-  final Color badgeColor;
-  final Color badgeTextColor;
+  const ChatDock({super.key, required this.driveId});
 
   @override
   State<ChatDock> createState() => _ChatDockState();
 }
 
 class _ChatDockState extends State<ChatDock> {
-  late final ChatController _cc = ChatController(driveId: widget.driveId);
+  ChatController? _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = ChatController(driveId: widget.driveId)..init();
+  }
+
+  @override
+  void didUpdateWidget(covariant ChatDock oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.driveId != widget.driveId) {
+      _ctrl?.disposeAsync();
+      _ctrl = ChatController(driveId: widget.driveId)..init();
+      setState(() {});
+    }
+  }
 
   @override
   void dispose() {
-    _cc.dispose();
+    _ctrl?.disposeAsync();
     super.dispose();
   }
 
   Future<void> _openChat() async {
-    await showModalBottomSheet<void>(
+    final ctrl = _ctrl;
+    if (ctrl == null) return;
+
+    await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => ChangeNotifierProvider<ChatController>.value(
-        value: _cc,
-        child: DraggableScrollableSheet(
-          expand: false,
-          minChildSize: 0.5,
-          maxChildSize: 0.95,
-          initialChildSize: 0.85,
-          builder: (_, scrollController) {
-            return Material(
-              elevation: 12,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-              clipBehavior: Clip.antiAlias,
-              // ВАЖНО: ваш ChatSheet без параметров контроллера
-              child: ChatSheet(),
-            );
-          },
-        ),
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-    );
+      builder: (ctx) {
+        return ChangeNotifierProvider.value(
+          value: ctrl,
+          child: const Material(
+            type: MaterialType.transparency,
+            child: ChatSheet(),
+          ),
+        );
+      },
+    ).whenComplete(() {
+      ctrl.markAllRead(); // синкнём прочитанное
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider<ChatController>.value(
-      value: _cc,
-      child: Consumer<ChatController>(
-        builder: (context, cc, _) {
-          // Если у вас нет unreadCount — можно показать просто FAB без бейджа
-          final int unread =
-          (cc as dynamic?)?.unreadCount is int ? (cc as dynamic).unreadCount as int : 0;
+    final ctrl = _ctrl;
+    if (ctrl == null) return const SizedBox.shrink();
 
-          return Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Tooltip(
-                message: widget.tooltip,
-                child: FloatingActionButton(
-                  heroTag: 'chat_dock_fab',
-                  onPressed: _openChat,
-                  child: Icon(widget.icon),
-                ),
-              ),
-              if (unread > 0)
-                Positioned(
-                  right: -2,
-                  top: -2,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: widget.badgeColor,
-                      borderRadius: BorderRadius.circular(10),
-                      boxShadow: const [BoxShadow(blurRadius: 2, color: Colors.black26)],
-                    ),
-                    child: Text(
-                      unread > 99 ? '99+' : '$unread',
-                      style: TextStyle(
-                        color: widget.badgeTextColor,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                      ),
+    return ChangeNotifierProvider.value(
+      value: ctrl,
+      child: Consumer<ChatController>(
+        builder: (_, c, __) {
+          final unread = c.unreadCount;
+
+          // Фиксированный контейнер под FAB (Material FAB по умолчанию 56x56)
+          return SizedBox(
+            width: 56,
+            height: 56,
+            child: Stack(
+              clipBehavior: Clip.hardEdge, // ничего не вылазит наружу
+              children: [
+                // сам FAB по центру
+                Positioned.fill(
+                  child: Align(
+                    alignment: Alignment.center,
+                    child: FloatingActionButton(
+                      tooltip: 'Chat',
+                      onPressed: _openChat,
+                      child: const Icon(Icons.chat_bubble_outline),
                     ),
                   ),
                 ),
-            ],
+
+                // бейдж — только если unread > 0, ВНУТРИ контура FAB
+                if (unread > 0)
+                  Positioned(
+                    top: 4,
+                    right: 4,
+                    child: _UnreadBadge(count: unread),
+                  ),
+              ],
+            ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _UnreadBadge extends StatelessWidget {
+  final int count;
+  const _UnreadBadge({required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    if (count <= 0) return const SizedBox.shrink();
+    final text = count > 99 ? '99+' : '$count';
+    final scheme = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+      decoration: BoxDecoration(
+        color: scheme.error,
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: const [BoxShadow(blurRadius: 2, color: Colors.black26)],
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        text,
+        style: TextStyle(
+          color: scheme.onError,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          height: 1.0,
+        ),
       ),
     );
   }
