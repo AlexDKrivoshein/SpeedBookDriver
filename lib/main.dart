@@ -1,18 +1,22 @@
+// lib/main.dart
 import 'dart:io' show exit;
 import 'package:flutter/services.dart' show SystemNavigator;
 
 import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:flutter/foundation.dart' show kReleaseMode, kDebugMode;
 
-// ===== Branch (по умолчанию отключено флагом) =====
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_branch_sdk/flutter_branch_sdk.dart';
 
+// Внутренние импорты
 import 'route_observer.dart';
 import 'api_service.dart';
 import 'features/home/home_page.dart';
@@ -22,26 +26,25 @@ import 'permission_helper.dart';
 import 'onboarding_page.dart';
 import 'translations.dart';
 
-// ★ NEW: Firebase Messaging + локальные уведомления
-import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+// FCM/звонки
+import 'fcm/messaging_service.dart';
+import 'fcm/incoming_call_service.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-/// Флаг управления Branch из сборки:
-///   по умолчанию false (отключено для тестов / разработки)
+/// Управление Branch через флаг сборки (по умолчанию — off)
 const bool kBranchEnabled =
 bool.fromEnvironment('BRANCH_ENABLED', defaultValue: false);
 
-// ★ NEW: Канал уведомлений — должен совпадать с нативным (MainActivity/Manifest)
-const AndroidNotificationChannel kDefaultAndroidChannel = AndroidNotificationChannel(
+/// Канал уведомлений (должен совпадать с нативным)
+const AndroidNotificationChannel kDefaultAndroidChannel =
+AndroidNotificationChannel(
   'sbdriver_channel',
   'General notifications',
   description: 'SpeedBook push notifications',
   importance: Importance.high,
 );
 
-// ★ NEW: Плагин локальных уведомлений (foreground)
 final FlutterLocalNotificationsPlugin _fln = FlutterLocalNotificationsPlugin();
 
 Future<void> _initBranchDeepLinking() async {
@@ -51,15 +54,12 @@ Future<void> _initBranchDeepLinking() async {
   }
 
   await FlutterBranchSdk.init(enableLogging: kDebugMode);
-  if (kDebugMode) {
-    // FlutterBranchSdk.validateSDKIntegration();
-  }
 
   FlutterBranchSdk.listSession().listen((data) async {
     try {
       final map = Map<String, dynamic>.from(data);
       final inviter = (map['inviter_id'] ?? map['ref'])?.toString();
-      final linkId  = map['~id']?.toString();
+      final linkId = map['~id']?.toString();
 
       if (inviter != null && inviter.isNotEmpty) {
         final prefs = await SharedPreferences.getInstance();
@@ -84,8 +84,9 @@ Future<void> _initAppCheck() async {
   final isRelease = kReleaseMode;
 
   await FirebaseAppCheck.instance.activate(
-    androidProvider: isRelease ? AndroidProvider.playIntegrity : AndroidProvider.debug,
-    appleProvider:  isRelease ? AppleProvider.deviceCheck   : AppleProvider.debug,
+    androidProvider:
+    isRelease ? AndroidProvider.playIntegrity : AndroidProvider.debug,
+    appleProvider: isRelease ? AppleProvider.deviceCheck : AppleProvider.debug,
   );
 
   await FirebaseAppCheck.instance.setTokenAutoRefreshEnabled(true);
@@ -96,36 +97,53 @@ Future<void> _initAppCheck() async {
       debugPrint('AppCheck debug token: $token\n'
           '➡ Добавьте его в Firebase Console → App Check → Debug tokens.');
     } catch (e) {
-      debugPrint('AppCheck (debug) getToken ещё не принят сервером: $e');
+      debugPrint('[Main] AppCheck (debug) getToken ещё не принят сервером: $e');
     }
   }
 }
 
-// ★ NEW: Инициализация уведомлений (канал, разрешения, поведение iOS в foreground)
+/// Инициализация локальных уведомлений и разрешений
 Future<void> _initNotifications() async {
-  // Локальные уведомления
   const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
   const iosInit = DarwinInitializationSettings();
-  await _fln.initialize(const InitializationSettings(android: androidInit, iOS: iosInit));
+  await _fln.initialize(
+    const InitializationSettings(android: androidInit, iOS: iosInit),
+    onDidReceiveNotificationResponse: (resp) {
+      // payload — это строка с data.toString()
+      final payload = resp.payload;
+      if (payload != null && payload.isNotEmpty) {
+        // Простенький парсер: ключ=значение; распилим по запятым/фигурным
+        final cleaned = payload.replaceAll(RegExp(r'^{|}$'), '');
+        final map = <String, String>{};
+        for (final pair in cleaned.split(', ')) {
+          final kv = pair.split(': ');
+          if (kv.length == 2) map[kv[0]] = kv[1];
+        }
+        _handleNotificationNavigation(map);
+      }
+    },
+  );
 
-  // Создадим канал и с Flutter-стороны (на случай, если нативный ещё не успел)
   await _fln
-      .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+      .resolvePlatformSpecificImplementation<
+      AndroidFlutterLocalNotificationsPlugin>()
       ?.createNotificationChannel(kDefaultAndroidChannel);
 
-  // Запросим разрешения (Android 13+ и iOS)
   final settings = await FirebaseMessaging.instance.requestPermission(
-    alert: true, badge: true, sound: true, provisional: false,
+    alert: true,
+    badge: true,
+    sound: true,
+    provisional: false,
   );
   debugPrint('[FCM] permission: ${settings.authorizationStatus}');
 
-  // iOS: показывать баннер/звук, даже когда приложение активно
   await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
-    alert: true, badge: true, sound: true,
+    alert: true,
+    badge: true,
+    sound: true,
   );
 }
 
-// ★ NEW: Показ локального уведомления (используется для foreground и data-only кейсов)
 Future<void> _showLocalNotification({
   String? title,
   String? body,
@@ -153,28 +171,35 @@ Future<void> _showLocalNotification({
         presentSound: true,
       ),
     ),
-    payload: data == null || data.isEmpty ? null : data.toString(),
+    payload: (data == null || data.isEmpty) ? null : data.toString(),
   );
 }
 
-// ★ NEW: Фоновый обработчик data-сообщений (Android), когда приложение убито/в фоне
+/// Единый background-handler: вызывает логику IncomingCallService + локальные ноти
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
+  // Пробросим в сервис входящих вызовов (он сам разберёт type=call_invite и т. п.)
+  try {
+    await IncomingCallService.backgroundHandler(message);
+  } catch (_) {
+    // ignore
+  }
 
-  // Для notification-пушей система сама показывает баннер.
-  // Для data-only можно при желании показать локальное уведомление:
   final notif = message.notification;
   final data = message.data;
 
   if (notif == null && (data['title'] != null || data['body'] != null)) {
-    // Минимальная инициализация плагина в изоляте
+    // Минимальная инициализация локальных уведомлений в изоляте
     const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosInit = DarwinInitializationSettings();
     final tempFln = FlutterLocalNotificationsPlugin();
-    await tempFln.initialize(const InitializationSettings(android: androidInit, iOS: iosInit));
+    await tempFln.initialize(
+      const InitializationSettings(android: androidInit, iOS: iosInit),
+    );
     await tempFln
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        .resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(kDefaultAndroidChannel);
 
     await tempFln.show(
@@ -205,62 +230,80 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // ВАЖНО: регистрируем background-handler ДО init Firebase/runApp
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+
   await ApiService.loadPreloginTranslations();
   await Firebase.initializeApp();
 
-  // ★ NEW: Зарегистрировать фоновый обработчик до runApp
-  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-
   final opts = Firebase.app().options;
-  debugPrint('FB project: ${opts.projectId} appId: ${opts.appId} apiKey: ${opts.apiKey}');
+  debugPrint(
+      '[Main] Firebase project: ${opts.projectId} appId: ${opts.appId} apiKey: ${opts.apiKey}');
 
   await _initAppCheck();
-
-  // ★ NEW: Инициализируем уведомления/разрешения/канал
   await _initNotifications();
-
-  // Branch включаем ТОЛЬКО если задан флаг BRANCH_ENABLED
   await _initBranchDeepLinking();
 
-  // ★ NEW: Слушатель foreground-сообщений — показываем локальный баннер в активном приложении
+  // FCM в foreground: показываем локальный баннер + даём шанс UI обновиться
   FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
-    final notif = message.notification;
     final data = message.data;
-
-    final title = notif?.title ?? data['title'];
-    final body  = notif?.body  ?? data['body'];
-
-    await _showLocalNotification(title: title, body: body, data: data);
-
-    // Доп. логика обновления UI (счётчики, чат и т.п.) — по необходимости
-    debugPrint('[FCM] foreground message: notif=$notif data=$data');
+    final type = (data['type'] ?? '').toString().toLowerCase();
+    // Для входящих звонков не шлём локальный баннер — экран покажет MessagingService
+    if (type != 'call_invite') {
+      final notif = message.notification;
+      final title = notif?.title ?? data['title'];
+      final body  = notif?.body  ?? data['body'];
+      await _showLocalNotification(title: title, body: body, data: data);
+    }
+    debugPrint('[FCM] foreground message: notif=${message.notification} data=$data');
   });
 
-  // ★ NEW: Клик по уведомлению, когда приложение в фоне → открывается
+  // Клик по пушу из фона
   FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
     debugPrint('[FCM] onMessageOpenedApp: ${message.data}');
-    // Пример: навигация по payload
     _handleNotificationNavigation(message.data);
   });
 
-  // ★ NEW: Случай, когда приложение открыли "холодным стартом" тапом по пушу
+  // "Холодный старт" по тапу на пуш
   final initialMsg = await FirebaseMessaging.instance.getInitialMessage();
   if (initialMsg != null) {
     debugPrint('[FCM] getInitialMessage: ${initialMsg.data}');
     _handleNotificationNavigation(initialMsg.data);
   }
 
+  MessagingService.I.attachNavigator(navigatorKey);
+  await MessagingService.I.init();
+
   runApp(const MyApp());
 }
 
-// ★ NEW: Простая маршрутизация по клику (доработай под свои экраны)
+/// Универсальная маршрутизация по data пуша.
+/// Поддерживает:
+/// - type=call_invite / call_end
+/// - open_chat=true + drive_id
+/// - просто drive_id (открыть заказ/экран поездки)
 void _handleNotificationNavigation(Map<String, dynamic> data) {
-  // Например, если приходит drive_id — открыть экран заказа
+  final type = '${data['type'] ?? ''}'.toLowerCase();
   final driveId = int.tryParse('${data['drive_id'] ?? ''}');
+  final openChat = '${data['open_chat'] ?? ''}'.toLowerCase() == 'true';
+
+  if (type == 'call_end') {
+    // Можно закрыть экран разговора, если открыт, — оставляем на совесть экрана.
+    return;
+  }
+
+  // Чат/поездка
   if (driveId != null) {
-    //navigatorKey.currentState?.pushNamed('/');
-    navigatorKey.currentState?.pushNamed('/drive', arguments: driveId, );
-    // Или navigatorKey.currentState?.pushNamed('/drive', arguments: driveId);
+    navigatorKey.currentState?.push(
+      MaterialPageRoute(
+        builder: (_) => HomePage(),
+        settings: RouteSettings(
+          name: 'home_from_push',
+          arguments: {'drive_id': driveId, 'open_chat': openChat},
+        ),
+      ),
+    );
+    return;
   }
 }
 
@@ -298,6 +341,7 @@ class MyApp extends StatelessWidget {
               routes: {
                 '/': (_) => const _Root(),
                 '/login': (_) => const PhoneInputPage(),
+                // '/drive': (_) => DrivePage(), // если добавишь конкретный экран
               },
               initialRoute: '/',
             ),
@@ -334,7 +378,8 @@ class _RootState extends State<_Root> {
     return hasToken && hasSecret;
   }
 
-  Future<bool> _waitForBackendSession({Duration timeout = const Duration(seconds: 3)}) async {
+  Future<bool> _waitForBackendSession(
+      {Duration timeout = const Duration(seconds: 3)}) async {
     final start = DateTime.now();
     while (DateTime.now().difference(start) < timeout) {
       if (await _hasBackendSession()) return true;
@@ -424,11 +469,14 @@ class _RootState extends State<_Root> {
 
         try {
           final prefs = await SharedPreferences.getInstance();
-          final savedLang = (prefs.getString('user_lang') ?? '').toLowerCase();
+          final savedLang =
+          (prefs.getString('user_lang') ?? '').toLowerCase();
           final userLang = savedLang.isNotEmpty
               ? savedLang
               : (profile?['lang'] as String?)?.toLowerCase() ??
-              WidgetsBinding.instance.platformDispatcher.locale.languageCode.toLowerCase();
+              WidgetsBinding.instance.platformDispatcher.locale
+                  .languageCode
+                  .toLowerCase();
 
           if (mounted) {
             await context.read<Translations>().setLang(userLang);
@@ -442,10 +490,12 @@ class _RootState extends State<_Root> {
         }
       } else {
         final prefs = await SharedPreferences.getInstance();
-        final savedLang = (prefs.getString('user_lang') ?? '').toLowerCase();
+        final savedLang =
+        (prefs.getString('user_lang') ?? '').toLowerCase();
         final guestLang = savedLang.isNotEmpty
             ? savedLang
-            : WidgetsBinding.instance.platformDispatcher.locale.languageCode.toLowerCase();
+            : WidgetsBinding.instance.platformDispatcher.locale.languageCode
+            .toLowerCase();
 
         if (mounted) {
           await context.read<Translations>().setLang(guestLang);
@@ -464,7 +514,10 @@ class _RootState extends State<_Root> {
     if (msg.isEmpty) {
       final data = map['data'];
       if (data is Map<String, dynamic>) {
-        msg = (data['message']?.toString() ?? data['error']?.toString() ?? '').trim();
+        msg = (data['message']?.toString() ??
+            data['error']?.toString() ??
+            '')
+            .trim();
       }
     }
     if (msg.isEmpty) {

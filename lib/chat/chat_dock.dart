@@ -87,6 +87,7 @@ class _ChatDockState extends State<ChatDock> {
                   child: Align(
                     alignment: Alignment.center,
                     child: FloatingActionButton(
+                      heroTag: 'chat_fab_${widget.driveId}',
                       tooltip: 'Chat',
                       onPressed: _openChat,
                       child: const Icon(Icons.chat_bubble_outline),

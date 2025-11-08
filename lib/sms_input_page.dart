@@ -17,7 +17,7 @@ import 'package:provider/provider.dart';
 import 'api_service.dart';
 import 'brand_header.dart';
 import 'brand.dart';
-import 'messaging_service.dart';
+import 'fcm/messaging_service.dart';
 import 'translations.dart';
 
 class SmsInputPage extends StatefulWidget {

@@ -433,5 +433,13 @@ class DriverApi {
       'drive_id': driveId,
     });
   }
+
+  static Future<void> endCall(Map<String, dynamic> body) async {
+    await ApiService.callAndDecode('end_call', body);
+  }
+
+  static Future<void> answerCall(int callId) async {
+    await ApiService.callAndDecode('answer_call', {'call_id': callId});
+  }
 }
 
