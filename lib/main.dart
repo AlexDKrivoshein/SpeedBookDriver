@@ -28,7 +28,6 @@ import 'translations.dart';
 
 // FCM/звонки
 import 'fcm/messaging_service.dart';
-import 'fcm/incoming_call_service.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -175,56 +174,10 @@ Future<void> _showLocalNotification({
   );
 }
 
-/// Единый background-handler: вызывает логику IncomingCallService + локальные ноти
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
-  // Пробросим в сервис входящих вызовов (он сам разберёт type=call_invite и т. п.)
-  try {
-    await IncomingCallService.backgroundHandler(message);
-  } catch (_) {
-    // ignore
-  }
-
-  final notif = message.notification;
-  final data = message.data;
-
-  if (notif == null && (data['title'] != null || data['body'] != null)) {
-    // Минимальная инициализация локальных уведомлений в изоляте
-    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const iosInit = DarwinInitializationSettings();
-    final tempFln = FlutterLocalNotificationsPlugin();
-    await tempFln.initialize(
-      const InitializationSettings(android: androidInit, iOS: iosInit),
-    );
-    await tempFln
-        .resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(kDefaultAndroidChannel);
-
-    await tempFln.show(
-      DateTime.now().millisecondsSinceEpoch ~/ 1000,
-      data['title'],
-      data['body'],
-      NotificationDetails(
-        android: AndroidNotificationDetails(
-          kDefaultAndroidChannel.id,
-          kDefaultAndroidChannel.name,
-          channelDescription: kDefaultAndroidChannel.description,
-          importance: Importance.high,
-          priority: Priority.high,
-          playSound: true,
-          enableVibration: true,
-        ),
-        iOS: const DarwinNotificationDetails(
-          presentAlert: true,
-          presentBadge: true,
-          presentSound: true,
-        ),
-      ),
-      payload: data.isEmpty ? null : data.toString(),
-    );
-  }
+  await MessagingService.firebaseBackgroundHandler(message);
 }
 
 Future<void> main() async {

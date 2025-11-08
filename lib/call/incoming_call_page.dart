@@ -23,6 +23,7 @@ class IncomingCallPage extends StatefulWidget {
     Future<void> Function(CallPayload)? onDecline,
   }) {
     return MaterialPageRoute(
+      settings: const RouteSettings(name: 'IncomingCallPage'),
       fullscreenDialog: true,
       builder: (_) => IncomingCallPage(
         payload: payload,

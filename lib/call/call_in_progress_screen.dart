@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:speedbookdriver/call/call_payload.dart';
-import 'package:speedbookdriver/call/agora_controller.dart';
-import 'package:speedbookdriver/api_service.dart';
-import 'package:speedbookdriver/driver_api.dart'; // для AppApi
+import '../call/call_payload.dart';
+import '../call/agora_controller.dart';
+import '../driver_api.dart'; // для AppApi
 
 class CallInProgressScreen extends StatefulWidget {
   final CallPayload payload;
   const CallInProgressScreen({super.key, required this.payload});
 
-  static Route route(CallPayload p) =>
-      MaterialPageRoute(builder: (_) => CallInProgressScreen(payload: p));
+  static Route route(CallPayload p) => MaterialPageRoute(
+     settings: const RouteSettings(name: 'CallInProgressScreen'),
+     builder: (_) => CallInProgressScreen(payload: p),
+  );
 
   @override
   State<CallInProgressScreen> createState() => _CallInProgressScreenState();
