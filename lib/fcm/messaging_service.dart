@@ -1,20 +1,17 @@
 // lib/fcm/messaging_service.dart
 import 'dart:io';
 import 'dart:async';
-import 'dart:convert'; // NEW: для jsonEncode
-import 'package:flutter/foundation.dart';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:permission_handler/permission_handler.dart';
-
-// NEW: локальные уведомления
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../api_service.dart';
 import '../call/call_payload.dart';
-import '../call/incoming_call_page.dart';
-import '../call/call_in_progress_screen.dart';
 import '../call/agora_controller.dart';
+import '../call/incoming_call_page.dart';            // единый экран звонка
+import '../fcm/incoming_call_service.dart';         // стримы call_accepted / call_ended
 
 /// Единая точка FCM + звонки.
 /// - foreground: слушает onMessage / onMessageOpenedApp / getInitialMessage и управляет UI
@@ -42,10 +39,8 @@ class MessagingService {
 
   // ======== Local Notifications (каналы + показ входящего) ========
 
-  // NEW: глобальный экземпляр в пределах файла
   static final FlutterLocalNotificationsPlugin _ln = FlutterLocalNotificationsPlugin();
 
-  // NEW: канал входящих звонков
   static const AndroidNotificationChannel _icallChannel = AndroidNotificationChannel(
     'sbtaxi_icalls', // ID канала
     'SpeedBook Incoming Calls',
@@ -71,15 +66,28 @@ class MessagingService {
       const InitializationSettings(android: initAndroid, iOS: initIOS),
       onDidReceiveNotificationResponse: (resp) async {
         final payload = resp.payload;
-        if (payload != null && payload.isNotEmpty) {
-          // TODO: при тапе по локальному уведомлению — открыть экран звонка,
-          // распарсить payload как JSON с параметрами вызова, если нужно.
-          // final data = jsonDecode(payload) as Map<String, dynamic>;
-        }
+        if (payload == null || payload.isEmpty) return;
+
+        try {
+          final data = jsonDecode(payload) as Map<String, dynamic>;
+          final type = (data['type'] ?? '').toString().toLowerCase();
+          if (type == 'call_invite') {
+            _handleCallInvite(data, source: 'local_notification_tap');
+          } else if (type == 'call_accepted') {
+            final callId = int.tryParse('${data['call_id']}');
+            if (callId != null) {
+              debugPrint('[Call] call accepted for id=$callId');
+              IncomingCallService.markCallAccepted(callId);
+            }
+          } else if (type == 'call_end' || type == 'call_cancelled') {
+            final callId = int.tryParse('${data['call_id']}');
+            final reason = (data['reason'] ?? type).toString();
+            if (callId != null) IncomingCallService.markCallEnded(callId, reason: reason);
+          }
+        } catch (_) {/* ignore */}
       },
     );
 
-    // ВАЖНО: создать канал ДО первого показа/получения уведомлений
     await _ln
         .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(_icallChannel);
@@ -132,13 +140,15 @@ class MessagingService {
       final type = (data['type'] ?? '').toString().trim().toLowerCase();
       debugPrint('[FCM][bg] type=$type data=$data');
 
-      // В фоне — только лёгкая логика (никакого UI, плагин уведомлений в headless может быть недоступен)
+      // В фоне — лёгкая логика (никакого UI)
       if (type == 'call_end' || type == 'call_cancelled') {
         final callId = int.tryParse('${data['call_id'] ?? ''}');
+        final reason = (data['reason'] ?? type).toString();
         if (callId != null) {
-          try {
-            await ApiService.callAndDecode('ack_call_end', {'call_id': callId});
-          } catch (_) {}
+          // оповестить бэк, что увидели завершение
+          try { await ApiService.callAndDecode('ack_call_end', {'call_id': callId}); } catch (_) {}
+          // пробросить событие для активных слушателей (если есть живой изолят/UI)
+          IncomingCallService.markCallEnded(callId, reason: reason);
         }
       }
     } catch (e, st) {
@@ -153,8 +163,6 @@ class MessagingService {
     _inited = true;
 
     await _ensureNotificationPermission();
-
-    // NEW: инициализируем локальные уведомления и СОЗДАЁМ КАНАЛ
     await _initLocalNotifications();
 
     // Токен → на сервер
@@ -235,6 +243,14 @@ class MessagingService {
         _handleCallEnded(data, source: source);
         return;
 
+    // call_accepted → переводим UI в inProgress
+      case 'call_accepted':
+        final callId = int.tryParse('${data['call_id']}');
+        if (callId != null) {
+          IncomingCallService.markCallAccepted(callId);
+        }
+        return;
+
       default:
         _handleOtherTypes(data, source: source);
         return;
@@ -291,8 +307,7 @@ class MessagingService {
 
       final nav = _navKey?.currentState;
 
-      // NEW: если навигатора нет (например, ещё не успели attach или нет контекста),
-      // покажем локальное heads-up уведомление как мягкий фоллбек (foreground).
+      // Фоллбек: если навигатора пока нет — покажем локальное heads-up (foreground)
       if (nav == null) {
         await showIncomingCallNotification(
           title: 'Incoming SpeedBook call',
@@ -323,6 +338,7 @@ class MessagingService {
       nav.push(
         IncomingCallPage.route(
           payload: payload,
+          mode: CallUIMode.incoming,
           onAccept: (p) async {
             // Сообщаем бэку, что приняли
             try {
@@ -344,10 +360,27 @@ class MessagingService {
               uid: p.uid,
             );
 
-            // Открываем экран разговора, ЗАМЕНЯЯ входящее
             final ctx = _navKey?.currentState?.overlay?.context ?? _navKey?.currentContext;
             if (ctx != null) {
-              Navigator.of(ctx).pushReplacement(CallInProgressScreen.route(p));
+              Navigator.of(ctx).pushReplacement(
+                IncomingCallPage.route(
+                  payload: p,
+                  mode: CallUIMode.inProgress,
+                  onHangup: (pp) async {
+                    try {
+                      await ApiService.callAndDecode('end_call', {
+                        'call_id': pp.callId,
+                        'reason': 'hangup',
+                      });
+                    } catch (_) {} finally {
+                      await AgoraController.instance.leave();
+                      if (Navigator.of(ctx).canPop()) {
+                        Navigator.of(ctx).pop();
+                      }
+                    }
+                  },
+                ),
+              );
             }
           },
           onDecline: (p) async {
@@ -357,10 +390,12 @@ class MessagingService {
                 'reason': 'declined',
               });
             } catch (_) {}
+
             final ctx = _navKey?.currentState?.overlay?.context ?? _navKey?.currentContext;
             if (ctx != null) {
               Navigator.of(ctx).maybePop();
             }
+
             // Сбрасываем флаги для отказа
             _incomingOpen = false;
             _activeCallId = null;
@@ -400,16 +435,30 @@ class MessagingService {
   /// Закрыть экраны звонка при `call_end` / `call_cancelled`.
   void _handleCallEnded(Map<String, dynamic> data, {required String source}) {
     final ctx = _navKey?.currentState?.overlay?.context ?? _navKey?.currentContext;
+    final endedId = int.tryParse('${data['call_id'] ?? ''}');
+    final reason  = (data['reason'] ?? data['type'] ?? 'remote_hangup').toString();
+
+    // 1) Всегда уведомляем подписчиков (UI и контроллеры)
+    if (endedId != null) {
+      IncomingCallService.markCallEnded(endedId, reason: reason);
+    }
+
+    // 2) Если прилетел end для другого звонка — UI не трогаем
+    if (endedId != null && _activeCallId != null && endedId != _activeCallId) {
+      debugPrint('[FCM] $source call_end for other call (ended=$endedId, active=$_activeCallId)');
+      return;
+    }
+
+    // 3) Если контекста нет — просто сбрасываем состояния
     if (ctx == null) {
       debugPrint('[FCM] $source call_end/cancelled: no context');
       _incomingOpen = false;
       _activeCallId = null;
-      // На всякий — уберём локалку
-      unawaited(hideIncomingCallNotification());
+      hideIncomingCallNotification();
       return;
     }
 
-    // Закрываем возможные экраны звонков (по именованным маршрутам!)
+    // 4) Закрываем возможные экраны звонков (по именованным маршрутам!)
     Navigator.of(ctx).popUntil((route) {
       final name = route.settings.name;
       final isCall = name == 'IncomingCallPage' || name == 'CallInProgressScreen';
@@ -418,8 +467,8 @@ class MessagingService {
 
     _incomingOpen = false;
     _activeCallId = null;
-    unawaited(hideIncomingCallNotification());
-    debugPrint('[FCM] $source call ended → closed call screens');
+    hideIncomingCallNotification();
+    debugPrint('[FCM] $source call ended → closed call screens (reason=$reason)');
   }
 
   // ======== Utils ========

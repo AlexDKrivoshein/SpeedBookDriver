@@ -348,6 +348,8 @@ class _DrivingMapPageState extends State<DrivingMapPage>
         accuracy: accuracy,
       ).timeout(const Duration(seconds: 12));
 
+      debugPrint('[Driving] start_driving reply: $reply');
+
       if (_disposed) return;
 
       final status = (reply['status'] ?? '').toString();

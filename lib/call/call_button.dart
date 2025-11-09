@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
+
 import '../api_service.dart';
-import 'call_page.dart';
+import '../call/agora_controller.dart';
+import '../call/call_payload.dart';
+import '../call/incoming_call_page.dart';
 
 /// Кнопка "Позвонить" рядом с чатом
 class CallButton extends StatefulWidget {
@@ -22,19 +26,32 @@ class CallButton extends StatefulWidget {
 class _CallButtonState extends State<CallButton> {
   bool _loading = false;
 
+  Future<bool> _ensureMicPermission() async {
+    final s = await Permission.microphone.status;
+    if (s.isGranted) return true;
+    final r = await Permission.microphone.request();
+    return r.isGranted;
+  }
+
   Future<void> _startCall() async {
     if (_loading) return;
     setState(() => _loading = true);
 
     try {
-      // Вызываем создание звонка
-      final resp = await ApiService.callAndDecode(
-        'create_call',
-        {
-          'drive_id': widget.driveId,
-          'force_new': false,
-        },
-      );
+      // 1) Разрешение на микрофон ДО старта
+      if (!await _ensureMicPermission()) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Microphone permission is required')),
+        );
+        return;
+      }
+
+      // 2) Создаём звонок на бэке
+      final resp = await ApiService.callAndDecode('create_call', {
+        'drive_id': widget.driveId,
+        'force_new': false,
+      });
 
       final status = '${resp['status'] ?? 'OK'}'.toUpperCase();
       if (status != 'OK') {
@@ -44,7 +61,6 @@ class _CallButtonState extends State<CallButton> {
         return;
       }
 
-      // Достаём полезные поля из ответа
       final data = (resp['data'] ?? {}) as Map? ?? {};
       debugPrint('[Call] Create call response: $data');
 
@@ -52,38 +68,87 @@ class _CallButtonState extends State<CallButton> {
       final token   = (data['token'] ?? '') as String;
       final channel = (data['channel'] ?? '') as String;
 
-      // uid может называться по-разному, подстрахуемся
+      // uid может называться по-разному
       final uid = (data['uid'] ?? data['agora_uid']) is int
-          ? data['uid'] ?? data['agora_uid']
+          ? (data['uid'] ?? data['agora_uid']) as int
           : int.tryParse('${data['uid'] ?? data['agora_uid'] ?? ''}');
       final appId = (data['agora_app_id'] ?? data['appId'] ?? '') as String;
 
-      if (callId == null || token.isEmpty || appId.isEmpty || uid == null) {
+      // Доп. инфо для UI (если бэк отдаёт)
+      final peerName   = (data['peer_name'] ?? data['name'] ?? '') as String;
+      final peerAvatar = (data['peer_avatar'] ?? data['avatar'] ?? '') as String;
+
+      if (callId == null || token.isEmpty || appId.isEmpty || uid == null || channel.isEmpty) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Bad server response: missing call_id/token/appId/uid')),
+          const SnackBar(content: Text('Bad server response: missing call_id/token/appId/uid/channel')),
         );
         return;
       }
 
-      // Навигация на страницу звонка
+      // 3) Сразу подключаемся к каналу (исходящий звонок)
+      await AgoraController.instance.join(
+        appId: appId,
+        token: token,
+        channel: channel,
+        uid: uid,
+      );
+
+      // 4) Готовим payload для UI
+      final payload = CallPayload(
+        callId: callId,
+        channel: channel,
+        token: token,
+        uid: uid,
+        appId: appId,
+        initiatorName: (peerName).toString().trim().isNotEmpty ? peerName : 'Calling...',
+        initiatorAvatar: peerAvatar,
+        ringMs: 0, // для исходящего авто-таймаут не нужен
+      );
+
+      // 5) Открываем универсальный экран в режиме исходящего звонка
       if (!mounted) return;
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => CallPage(
-            appId: appId,
-            token: token,
-            channel: channel,
-            uid: uid,
-            callId: callId, // ✅ передаём правильный идентификатор
-          ),
+      await Navigator.of(context).push(
+        IncomingCallPage.route(
+          payload: payload,
+          mode: CallUIMode.outgoing,
+          // Отмена исходящего: завершаем звонок и выходим из канала
+          onCancel: (p) async {
+            try {
+              await ApiService.callAndDecode('end_call', {
+                'call_id': callId,
+                'reason': 'caller_cancelled',
+              });
+            } catch (_) {} finally {
+              await AgoraController.instance.leave();
+              if (Navigator.of(context).canPop()) {
+                Navigator.of(context).pop();
+              }
+            }
+          },
+          // На случай, если ты решишь переводить этот же экран в режим inProgress и вешать Hangup
+          onHangup: (p) async {
+            try {
+              await ApiService.callAndDecode('end_call', {
+                'call_id': callId,
+                'reason': 'hangup',
+              });
+            } catch (_) {} finally {
+              await AgoraController.instance.leave();
+              if (Navigator.of(context).canPop()) {
+                Navigator.of(context).pop();
+              }
+            }
+          },
         ),
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Call error: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Call error: $e')),
+      );
+      // При ошибке — на всякий случай выйти из канала
+      try { await AgoraController.instance.leave(); } catch (_) {}
     } finally {
       if (mounted) setState(() => _loading = false);
     }
