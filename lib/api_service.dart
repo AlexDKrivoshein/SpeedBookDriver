@@ -24,6 +24,11 @@ class ApiService {
   // ==== сетевые ретраи ====
   static const int _maxAttempts = 5;
   static const int _timeoutSeconds = 8;
+  static String? _token;
+  static String? _secret;
+
+  static bool get isAuthenticated =>
+      _token?.isNotEmpty == true && _secret?.isNotEmpty == true;
 
   static bool _shouldRetryStatus(int code) =>
       code == 429 || (code >= 500 && code < 600);
@@ -51,11 +56,11 @@ class ApiService {
     }
 
     try {
-      final token = await FirebaseAppCheck.instance.getToken();
-      if (token == null || token.isEmpty) return null;
-      return token;
+      final fb_token = await FirebaseAppCheck.instance.getToken();
+      if (fb_token == null || fb_token.isEmpty) return null;
+      return fb_token;
     } catch (e) {
-      debugPrint('[ApiService] AppCheck token error: $e');
+      debugPrint('[ApiService] AppCheck Firebase token error: $e');
       return null;
     }
   }
@@ -63,14 +68,14 @@ class ApiService {
   // ===== Проверка токена =====
   static Future<String> _ensureValidToken({bool validateOnline = false}) async {
     final prefs  = await SharedPreferences.getInstance();
-    final token  = prefs.getString('token');
-    final secret = prefs.getString('secret');
+    _token  = prefs.getString('token');
+    _secret = prefs.getString('secret');
 
     debugPrint('[ApiService] Ensure token, validate: $validateOnline');
-    debugPrint('[ApiService] Token: $token, secret: $secret');
+    debugPrint('[ApiService] Token: $_token, secret: $_secret');
 
-    final missing = token == null || token.isEmpty || secret == null || secret.isEmpty;
-    if (missing) {
+//    final missing = _token == null || _token.isEmpty || _secret == null || secret.isEmpty;
+    if (!isAuthenticated ) {
       debugPrint('[ApiService] Token not found, validate: $validateOnline');
       if (validateOnline) {
         debugPrint('[ApiService] Handle invalid token');
@@ -90,7 +95,7 @@ class ApiService {
       final resp = await http.post(
         Uri.parse('$apiUrl/api/validate_token'),
         headers: {
-          'Authorization': 'Bearer $token',
+          'Authorization': 'Bearer $_token',
           'Content-Type': 'application/json',
           if (_appCheck != null) 'X-Firebase-AppCheck': _appCheck,
         },
@@ -138,7 +143,7 @@ class ApiService {
       }
     }
 
-    return token!;
+    return _token!;
   }
 
   static Future<Map<String, dynamic>> checkTokenOnline({bool validateOnline = true}) async {
