@@ -218,6 +218,14 @@ class MessagingService {
     }
   }
 
+  // === Mic permission helper ===
+  Future<bool> _ensureMicPermission() async {
+    final s = await Permission.microphone.status;
+    if (s.isGranted) return true;
+    final r = await Permission.microphone.request();
+    return r.isGranted;
+  }
+
   // ======== Разбор входящих ========
 
   void _handleFcm(RemoteMessage m, {required String source}) {
@@ -318,6 +326,16 @@ class MessagingService {
         return;
       }
 
+      // ✅ foreground: попробуем запросить микрофон ДО показа экрана
+      final micOk = await _ensureMicPermission();
+      if (!micOk) {
+        final ctx = nav.context;
+        ScaffoldMessenger.of(ctx).showSnackBar(
+          const SnackBar(content: Text('Microphone permission is required to answer')),
+        );
+        // экран всё равно покажем: вторую проверку сделаем на кнопке Accept
+      }
+
       _incomingOpen = true;
       // ВАЖНО: _activeCallId НЕ трогаем до Accept!
 
@@ -339,7 +357,20 @@ class MessagingService {
         IncomingCallPage.route(
           payload: payload,
           mode: CallUIMode.incoming,
+
+          // ✅ дубль-проверка на кнопке Accept
           onAccept: (p) async {
+            final ok = await _ensureMicPermission();
+            if (!ok) {
+              final ctx = _navKey?.currentState?.overlay?.context ?? _navKey?.currentContext;
+              if (ctx != null) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  const SnackBar(content: Text('Microphone permission denied')),
+                );
+              }
+              return; // не входим в канал без разрешения
+            }
+
             // Сообщаем бэку, что приняли
             try {
               await ApiService.callAndDecode('answer_call', {'call_id': p.callId});
@@ -352,14 +383,16 @@ class MessagingService {
             // Закроем локалку, если вдруг была показана
             await hideIncomingCallNotification();
 
-            // Подключаемся к Agora
+            // Подключаемся к Agora (+ callId)
             await AgoraController.instance.join(
               appId: p.appId,
               token: p.token,
               channel: p.channel,
               uid: p.uid,
+              callId: p.callId,
             );
 
+            // Заменяем входящий на тот же экран, но "идёт звонок"
             final ctx = _navKey?.currentState?.overlay?.context ?? _navKey?.currentContext;
             if (ctx != null) {
               Navigator.of(ctx).pushReplacement(
@@ -383,6 +416,7 @@ class MessagingService {
               );
             }
           },
+
           onDecline: (p) async {
             try {
               await ApiService.callAndDecode('end_call', {

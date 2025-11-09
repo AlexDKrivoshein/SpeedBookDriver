@@ -441,5 +441,19 @@ class DriverApi {
   static Future<void> answerCall(int callId) async {
     await ApiService.callAndDecode('answer_call', {'call_id': callId});
   }
+
+  static Future<int?> getCurrentDriveId() async {
+    final resp = await ApiService.callAndDecode('get_current_drive_id', {});
+
+
+    if (resp is Map<String, dynamic>) {
+      final data = resp['data'];
+      if (data is Map<String, dynamic>) {
+        return ApiService.asInt(data['current_drive_id']);
+      }
+    }
+
+    return null;
+  }
 }
 

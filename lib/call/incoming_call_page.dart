@@ -1,4 +1,3 @@
-// lib/call/incoming_call_page.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
@@ -6,7 +5,7 @@ import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 
 import 'call_payload.dart';
 import '../fcm/incoming_call_service.dart'; // call_accepted / call_ended
-import 'agora_controller.dart';            // для leave() при внешнем завершении  <-- FIX: локальный импорт
+import 'agora_controller.dart';            // для leave() при внешнем завершении
 
 enum CallUIMode { incoming, outgoing, inProgress }
 
@@ -19,8 +18,8 @@ class IncomingCallPage extends StatefulWidget {
   final Future<void> Function(CallPayload)? onDecline;
 
   // Исходящий / Идущий
-  final Future<void> Function(CallPayload)? onCancel; // исходящий ещё не подняли
-  final Future<void> Function(CallPayload)? onHangup; // активный звонок завершить
+  final Future<void> Function(CallPayload)? onCancel;
+  final Future<void> Function(CallPayload)? onHangup;
 
   const IncomingCallPage({
     super.key,
@@ -88,10 +87,13 @@ class _IncomingCallPageState extends State<IncomingCallPage> {
 
     if (_mode == CallUIMode.incoming) {
       final ringMs = widget.payload.ringMs;
+      // Ветка 5.x — экземплярный API и enum без 's'
       _ringer.play(
         android: AndroidSounds.ringtone,
         ios: IosSounds.receivedMessage,
-        looping: true, volume: 1.0, asAlarm: true,
+        looping: true,
+        volume: 1.0,
+        asAlarm: true,
       );
       if (ringMs > 0) {
         _autoTimeout = Timer(Duration(milliseconds: ringMs), _timeoutDecline);
@@ -103,21 +105,18 @@ class _IncomingCallPageState extends State<IncomingCallPage> {
       if (callId == widget.payload.callId && _mode != CallUIMode.inProgress) {
         HapticFeedback.mediumImpact();
         _autoTimeout?.cancel();
-        _ringer.stop();
+        await _ringer.stop();
         setState(() => _mode = CallUIMode.inProgress);
       }
     });
 
     _endSub = IncomingCallService.endedStream.listen((ev) async {
-      if (!mounted) return;
-      if (ev.callId != widget.payload.callId) return;
-
+      if (!mounted || ev.callId != widget.payload.callId) return;
       _autoTimeout?.cancel();
       _ticker?.cancel();
-      _ringer.stop();
-
+      await _ringer.stop();
       try { await AgoraController.instance.leave(); } catch (_) {}
-      if (mounted && Navigator.of(context).canPop()) {
+      if (mounted && (ModalRoute.of(context)?.isCurrent ?? false) && Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
       }
     });
@@ -141,16 +140,12 @@ class _IncomingCallPageState extends State<IncomingCallPage> {
   Future<void> _guarded(Future<void> Function()? fn) async {
     if (_busy || fn == null) return;
     _busy = true;
-    try {
-      await fn();
-    } finally {
-      _busy = false;
-    }
+    try { await fn(); } finally { _busy = false; }
   }
 
   Future<void> _handleAccept() => _guarded(() async {
     debugPrint('[CallUI] Accept tapped');
-    _ringer.stop();
+    await _ringer.stop();
     if (widget.onAccept != null) {
       await widget.onAccept!(widget.payload);
     } else {
@@ -163,42 +158,42 @@ class _IncomingCallPageState extends State<IncomingCallPage> {
     }
   });
 
-  Future<void> _handleDecline() =>
-      _guarded(() async {
-      debugPrint('[CallUI] Decline tapped');
-      _autoTimeout?.cancel();
-      await _ringer.stop();
-      try {
-         if (widget.onDecline != null) {
-            await widget.onDecline!(widget.payload);
-         } else {
-            debugPrint('[CallUI] onDecline is NULL');
-         }
-      } catch (e, st) {
-         debugPrint('[CallUI] onDecline error: $e\n$st');
+  Future<void> _handleDecline() => _guarded(() async {
+    debugPrint('[CallUI] Decline tapped');
+    _autoTimeout?.cancel();
+    await _ringer.stop();
+    try {
+      if (widget.onDecline != null) {
+        await widget.onDecline!(widget.payload);
+      } else {
+        debugPrint('[CallUI] onDecline is NULL');
       }
-      // ✅ Закрываем страницу независимо от результата onDecline
-      if (mounted && Navigator.of(context).canPop()) {
-         Navigator.of(context).pop();
-      }
+    } catch (e, st) {
+      debugPrint('[CallUI] onDecline error: $e\n$st');
+    }
+    // Закрываем страницу только если она всё ещё текущая (чтобы избежать двойного pop)
+    if (mounted && (ModalRoute.of(context)?.isCurrent ?? false) && Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
   });
-  Future<void> _handleCancel() =>
-      _guarded(() async {
-        _ringer.stop();
-        if (widget.onCancel != null) {
-          await widget.onCancel!(widget.payload);
-        }
-        if (mounted && Navigator.of(context).canPop()) Navigator.of(context).pop();
-      });
 
-  Future<void> _handleHangup() =>
-      _guarded(() async {
-        _ringer.stop();
-        if (widget.onHangup != null) {
-          await widget.onHangup!(widget.payload);
-        }
-        if (mounted && Navigator.of(context).canPop()) Navigator.of(context).pop();
-      });
+  Future<void> _handleCancel() => _guarded(() async {
+    debugPrint('[CallUI] Cancel tapped');
+    await _ringer.stop();
+    if (widget.onCancel != null) await widget.onCancel!(widget.payload);
+    if (mounted && (ModalRoute.of(context)?.isCurrent ?? false) && Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
+  });
+
+  Future<void> _handleHangup() => _guarded(() async {
+    debugPrint('[CallUI] Hangup tapped');
+    await _ringer.stop();
+    if (widget.onHangup != null) await widget.onHangup!(widget.payload);
+    if (mounted && (ModalRoute.of(context)?.isCurrent ?? false) && Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -401,9 +396,7 @@ class _ActionButton extends StatelessWidget {
         onPressed: onTap == null
             ? null
             : () {
-          try {
-            onTap!();
-          } catch (e, st) {
+          try { onTap!(); } catch (e, st) {
             debugPrint('[CallUI] onTap error: $e\n$st');
           }
         },

@@ -19,21 +19,61 @@ import 'package:flutter_branch_sdk/flutter_branch_sdk.dart';
 // Внутренние импорты
 import 'route_observer.dart';
 import 'api_service.dart';
-import 'features/home/home_page.dart';
 import 'phone_input_page.dart';
 import 'location_service.dart';
 import 'permission_helper.dart';
 import 'onboarding_page.dart';
 import 'translations.dart';
+import 'features/home/home_page.dart';
+import 'features/home/driver_status_service.dart';
+import 'features/driving/driving_map_page.dart';
 
 // FCM/звонки
 import 'fcm/messaging_service.dart';
+
+// если DriverDetails объявлен тут:
+import 'driver_api.dart' show DriverDetails;
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 /// Управление Branch через флаг сборки (по умолчанию — off)
 const bool kBranchEnabled =
 bool.fromEnvironment('BRANCH_ENABLED', defaultValue: false);
+
+/// ===== Глобальные гарды роутинга (/drive) =====
+int? _lastRoutedDriveId;
+DateTime _lastRouteAt = DateTime.fromMillisecondsSinceEpoch(0);
+const _minRouteInterval = Duration(seconds: 5);
+bool _isNavigatingToDrive = false;
+
+/// Трекер верхнего роута
+class GlobalRouteObserver extends RouteObserver<PageRoute<dynamic>> {
+  static String? currentRouteName;
+
+  void _set(Route<dynamic>? route) {
+    if (route is PageRoute) currentRouteName = route.settings.name;
+  }
+
+  @override
+  void didPush(Route route, Route? previousRoute) {
+    _set(route);
+    super.didPush(route, previousRoute);
+  }
+
+  @override
+  void didPop(Route route, Route? previousRoute) {
+    _set(previousRoute);
+    super.didPop(route, previousRoute);
+  }
+
+  @override
+  void didReplace({Route? newRoute, Route? oldRoute}) {
+    _set(newRoute);
+    super.didReplace(newRoute: newRoute, oldRoute: oldRoute);
+  }
+}
+
+final GlobalRouteObserver globalRouteObserver = GlobalRouteObserver();
 
 /// Канал уведомлений (должен совпадать с нативным)
 const AndroidNotificationChannel kDefaultAndroidChannel =
@@ -111,7 +151,7 @@ Future<void> _initNotifications() async {
       // payload — это строка с data.toString()
       final payload = resp.payload;
       if (payload != null && payload.isNotEmpty) {
-        // Простенький парсер: ключ=значение; распилим по запятым/фигурным
+        // Простенький парсер: ключ=значение
         final cleaned = payload.replaceAll(RegExp(r'^{|}$'), '');
         final map = <String, String>{};
         for (final pair in cleaned.split(', ')) {
@@ -183,7 +223,7 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ВАЖНО: регистрируем background-handler ДО init Firebase/runApp
+  // Регистрируем фоновый обработчик FCM
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
   await ApiService.loadPreloginTranslations();
@@ -197,64 +237,86 @@ Future<void> main() async {
   await _initNotifications();
   await _initBranchDeepLinking();
 
-  // FCM в foreground: показываем локальный баннер + даём шанс UI обновиться
+  // Foreground FCM handler
   FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
     final data = message.data;
     final type = (data['type'] ?? '').toString().toLowerCase();
-    // Для входящих звонков не шлём локальный баннер — экран покажет MessagingService
     if (type != 'call_invite') {
       final notif = message.notification;
       final title = notif?.title ?? data['title'];
-      final body  = notif?.body  ?? data['body'];
+      final body = notif?.body ?? data['body'];
       await _showLocalNotification(title: title, body: body, data: data);
     }
     debugPrint('[FCM] foreground message: notif=${message.notification} data=$data');
   });
 
-  // Клик по пушу из фона
   FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
     debugPrint('[FCM] onMessageOpenedApp: ${message.data}');
     _handleNotificationNavigation(message.data);
   });
 
-  // "Холодный старт" по тапу на пуш
   final initialMsg = await FirebaseMessaging.instance.getInitialMessage();
   if (initialMsg != null) {
     debugPrint('[FCM] getInitialMessage: ${initialMsg.data}');
     _handleNotificationNavigation(initialMsg.data);
   }
 
+  // Навигатор прикрепляем сразу
   MessagingService.I.attachNavigator(navigatorKey);
-  await MessagingService.I.init();
+
+  // Стартуем сервис статуса (таймер живёт отдельно от экранов)
+  DriverStatusService.I.start();
+
+  // UI-зависимые штуки — после первого кадра
+  WidgetsBinding.instance.addPostFrameCallback((_) async {
+    await MessagingService.I.init();
+
+    DriverStatusService.I.addListenerFn((int? driveId) async {
+      final nav = navigatorKey.currentState;
+      if (nav == null) return;
+
+      final top = GlobalRouteObserver.currentRouteName; // если используете наш наблюдатель
+      // антидребезг — используйте ваши переменные, как уже сделали выше
+
+      if (driveId != null && driveId > 0) {
+        if (_isNavigatingToDrive) return;
+        if (top == '/drive') return;
+        if (_lastRoutedDriveId == driveId &&
+            DateTime.now().difference(_lastRouteAt) < _minRouteInterval) {
+          return;
+        }
+
+        _isNavigatingToDrive = true;
+        _lastRoutedDriveId = driveId;
+        _lastRouteAt = DateTime.now();
+        try {
+          await nav.pushNamed('/drive', arguments: {'drive_id': driveId});
+        } finally {
+          _isNavigatingToDrive = false;
+        }
+      } else {
+        if (top == '/drive' && nav.canPop()) {
+          nav.popUntil((r) => r.isFirst);
+        }
+      }
+    });
+  });
 
   runApp(const MyApp());
 }
 
-/// Универсальная маршрутизация по data пуша.
-/// Поддерживает:
-/// - type=call_invite / call_end
-/// - open_chat=true + drive_id
-/// - просто drive_id (открыть заказ/экран поездки)
+/// Универсальная маршрутизация по data пуша
 void _handleNotificationNavigation(Map<String, dynamic> data) {
   final type = '${data['type'] ?? ''}'.toLowerCase();
   final driveId = int.tryParse('${data['drive_id'] ?? ''}');
   final openChat = '${data['open_chat'] ?? ''}'.toLowerCase() == 'true';
 
-  if (type == 'call_end') {
-    // Можно закрыть экран разговора, если открыт, — оставляем на совесть экрана.
-    return;
-  }
+  if (type == 'call_end') return;
 
-  // Чат/поездка
   if (driveId != null) {
-    navigatorKey.currentState?.push(
-      MaterialPageRoute(
-        builder: (_) => HomePage(),
-        settings: RouteSettings(
-          name: 'home_from_push',
-          arguments: {'drive_id': driveId, 'open_chat': openChat},
-        ),
-      ),
+    navigatorKey.currentState?.pushNamed(
+      '/drive',
+      arguments: {'drive_id': driveId, 'open_chat': openChat},
     );
     return;
   }
@@ -275,7 +337,10 @@ class MyApp extends StatelessWidget {
               navigatorKey: navigatorKey,
               title: 'SpeedBook taxi driver',
               debugShowCheckedModeBanner: false,
-              navigatorObservers: [appRouteObserver],
+              navigatorObservers: [
+                appRouteObserver,
+                globalRouteObserver, // <— добавили
+              ],
               theme: ThemeData(
                 useMaterial3: true,
                 colorSchemeSeed: Colors.blue,
@@ -291,10 +356,36 @@ class MyApp extends StatelessWidget {
                 GlobalWidgetsLocalizations.delegate,
                 GlobalCupertinoLocalizations.delegate,
               ],
+              // Базовые маршруты
               routes: {
                 '/': (_) => const _Root(),
                 '/login': (_) => const PhoneInputPage(),
-                // '/drive': (_) => DrivePage(), // если добавишь конкретный экран
+              },
+              // Генерация экрана поездки с аргументами
+              onGenerateRoute: (settings) {
+                if (settings.name == '/drive') {
+                  int? driveId;
+                  bool openChat = false;
+                  final args = settings.arguments;
+
+                  if (args is int) {
+                    driveId = args;
+                  } else if (args is Map) {
+                    driveId = (args['drive_id'] as int?) ??
+                        int.tryParse('${args['drive_id'] ?? ''}');
+                    openChat = (args['open_chat'] == true) ||
+                        ('${args['open_chat'] ?? ''}'.toLowerCase() == 'true');
+                  }
+
+                  return MaterialPageRoute(
+                    settings: const RouteSettings(name: '/drive'),
+                    builder: (_) => DrivingMapPage(
+                      driveId: driveId,
+                      // openChat пока не нужен виджету — игнорим
+                    ),
+                  );
+                }
+                return null;
               },
               initialRoute: '/',
             ),
@@ -307,7 +398,6 @@ class MyApp extends StatelessWidget {
 
 class _Root extends StatefulWidget {
   const _Root({super.key});
-
   @override
   State<_Root> createState() => _RootState();
 }
