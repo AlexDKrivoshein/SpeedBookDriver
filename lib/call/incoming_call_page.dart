@@ -6,6 +6,7 @@ import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 import 'call_payload.dart';
 import '../fcm/incoming_call_service.dart'; // call_accepted / call_ended
 import 'agora_controller.dart';            // для leave() при внешнем завершении
+import 'permissions.dart';
 
 enum CallUIMode { incoming, outgoing, inProgress }
 
@@ -146,8 +147,26 @@ class _IncomingCallPageState extends State<IncomingCallPage> {
   Future<void> _handleAccept() => _guarded(() async {
     debugPrint('[CallUI] Accept tapped');
     await _ringer.stop();
+
+    // NEW: гарантируем разрешения
+    final ok = await CallPermissions.ensure();
+    if (!ok) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Microphone permission is required')),
+        );
+      }
+      // опционально: открыть настройки
+      // openAppSettings();
+      return;
+    }
+
     if (widget.onAccept != null) {
-      await widget.onAccept!(widget.payload);
+      try {
+        await widget.onAccept!(widget.payload);
+      } catch (e, st) {
+        debugPrint('[CallUI] onAccept error: $e\n$st');
+      }
     } else {
       debugPrint('[CallUI] onAccept is NULL');
       if (mounted) {

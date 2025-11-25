@@ -64,7 +64,7 @@ class _DrivingMapPageState extends State<DrivingMapPage>
   bool _camMoveProgrammatic = false; // чтобы отличать наши анимации от жестов пользователя
   bool _canFinish = false;
 
-  // NEW: безопасный флаг демонтирования виджета
+  // безопасный флаг демонтирования виджета
   bool _disposed = false;
 
   // терминальные статусы, при которых прекращаем опрос
@@ -101,25 +101,79 @@ class _DrivingMapPageState extends State<DrivingMapPage>
   @override
   void initState() {
     super.initState();
+
+    // пробрасываем driveId, если пришёл через навигацию
     _driveId = widget.driveId;
+
+    // следим за жизненным циклом
     WidgetsBinding.instance.addObserver(this);
 
-    LocationService.I.setDeniedForeverCallback(_onDeniedForever);
+    // радар: контроллер анимации
+    _radarCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    );
 
-    _radarCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 3))
-      ..repeat();
-
-    // Если пришли уже с currentDrive — выключим анимацию сразу после первого кадра
-    if (_driveId != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || _disposed) return;
-        _radarCtrl.stop();
-        setState(() => _searching = false);
-      });
+    // изначально мы в режиме поиска → запускаем радар
+    if (_searching) {
+      _radarCtrl.repeat();
     }
 
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadCarIcon());
-    _start();
+    // всё, что требует контекста/MediaQuery — после первого кадра
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // иконка машины под текущий DPR
+      _loadCarIcon();
+
+      final args = ModalRoute.of(context)?.settings.arguments;
+
+      // 1) Новый сценарий: пришли из FCM (drive_offer), надо просто начать поиск офферов
+      if (args is Map && args['force_offer_refresh'] == true) {
+        debugPrint('[Driving] FCM drive_offer → startOfferPolling()');
+        _offer = null;
+        _searching = true;
+        _offerPolling = true;
+        _radarCtrl.repeat();
+        _startOfferPolling();
+        return;
+      }
+
+      // 2) Сценарий: в аргументах уже лежит готовый оффер (если где-то так вызываешь)
+      if (args is Map && args['offer'] is Map) {
+        final o = args['offer'] as Map;
+
+        _offer = Map<String, dynamic>.from(o);
+
+        final fromName      = (o['from_name'] ?? '').toString();
+        final fromDetails   = (o['from_details'] ?? '').toString();
+        final toName        = (o['to_name'] ?? '').toString();
+        final toDetails     = (o['to_details'] ?? '').toString();
+        final distanceLabel = (o['distance_label'] ?? '').toString();
+        final durationLabel = _formatDuration(o['duration']);
+        final priceLabel    = (o['price_label'] ?? '').toString();
+        final offerValid    = o['offer_valid'] is int
+            ? o['offer_valid'] as int
+            : int.tryParse(o['offer_valid']?.toString() ?? '');
+
+        OfferSheet.show(
+          context,
+          fromName: fromName,
+          fromDetails: fromDetails,
+          toName: toName,
+          toDetails: toDetails,
+          distanceLabel: distanceLabel,
+          durationLabel: durationLabel,
+          priceLabel: priceLabel,
+          onAccept: _onAccept,
+          onDecline: _onDecline,
+          t: (k) => t(context, k),
+          offerValidSeconds: offerValid,
+        );
+        return;
+      }
+
+      // 3) Старый сценарий: запуск поиска / поллинга
+      _start();
+    });
   }
 
   // ---- Масштабируем PNG в рантайме под DPI ----
@@ -144,14 +198,13 @@ class _DrivingMapPageState extends State<DrivingMapPage>
 
   @override
   void dispose() {
-    _disposed = true; // NEW: зафиксировать демонтаж
+    _disposed = true;
     WidgetsBinding.instance.removeObserver(this);
     _positionSub?.cancel();
     LocationService.I.setDeniedForeverCallback(null);
     _radarCtrl.dispose();
     _offerPolling = false;
     _stopDrivePolling();
-   // unawaited(_callStopDriving(navigate: false));
     super.dispose();
   }
 
@@ -404,7 +457,7 @@ class _DrivingMapPageState extends State<DrivingMapPage>
 
         if (status == 'OK') {
           if (data is Map && (data['result']?.toString() == 'NOT_FOUND')) {
-            await Future.delayed(const Duration(seconds: 1));
+            await Future.delayed(const Duration(seconds: 10));
             continue;
           }
 
@@ -438,6 +491,7 @@ class _DrivingMapPageState extends State<DrivingMapPage>
                 final durationStr = _formatDuration(_offer!['duration']);
                 final cost        = ApiService.asString(data['cost']);
                 final currency    = ApiService.asString(data['currency']);
+                final offerValid  = ApiService.asInt(data['offer_valid']);
 
                 OfferSheet.show(
                   context,
@@ -447,10 +501,11 @@ class _DrivingMapPageState extends State<DrivingMapPage>
                   toDetails: toDetails,
                   distanceLabel: '${(distanceM / 1000).toStringAsFixed(1)} km',
                   durationLabel: durationStr,
-                  priceLabel: '$cost $currency',
+                  priceLabel: '$currency $cost',
                   onAccept: _onAccept,
                   onDecline: _onDecline,
                   t: (k) => t(context, k),
+                  offerValidSeconds: offerValid,
                 );
               }
               return;
@@ -458,9 +513,9 @@ class _DrivingMapPageState extends State<DrivingMapPage>
           }
         }
 
-        await Future.delayed(const Duration(seconds: 5));
+        await Future.delayed(const Duration(seconds: 10));
       } catch (_) {
-        await Future.delayed(const Duration(seconds: 5));
+        await Future.delayed(const Duration(seconds: 10));
       }
     }
   }
@@ -631,6 +686,7 @@ class _DrivingMapPageState extends State<DrivingMapPage>
 
     debugPrint('[Driving] status: $status');
 
+    // ===== 1. Клиент отменил поездку =====
     if (status == 'DRIVE_CANCELLED_BY_CUSTOMER' && !_stopSent) {
       debugPrint('[DrivePoll] cancelled by customer');
 
@@ -651,42 +707,45 @@ class _DrivingMapPageState extends State<DrivingMapPage>
       _canFinish  = false;
 
       if (mounted && !_disposed) {
-         setState(() {
-           _searching = true;   // если хочешь оставаться на этой странице и искать дальше
-           _radarCtrl.repeat();
-         });
+        setState(() {
+          _searching = true;   // остаёмся на странице и снова ищем
+          _radarCtrl.repeat();
+        });
       }
 
       await _goHome();
       return;
-    } else if (status == 'DRIVER_FOUND' || status == 'DRIVE_ARRIVED') {
-      _enterPickupMode();
-    } else if (status == 'DRIVE_STARTED') {
-      _enterDriveMode();                 // ← гарантируем режим навигации
     }
 
-    if (!_navMode && _canFinish) {
-      _enterDriveMode();
-    }
-
+    // ===== 2. Поездка завершена =====
     if (status == 'DRIVE_FINISHED') {
       _stopDrivePolling();
       _routeId = null;
       _canArrived = _canStart = _canCancel = _canFinish = false;
-      await _callStopDriving();                // navigate=true по умолчанию
+      await _callStopDriving(); // navigate=true по умолчанию
+      if (mounted && !_disposed) setState(() {});
+      return;
     }
 
-    // позиция машины из backend
+    // ===== 3. Переключение UI-режимов (pickup / drive) =====
+    if (status == 'DRIVER_FOUND' || status == 'DRIVE_ARRIVED') {
+      _enterPickupMode();
+    } else if (status == 'DRIVE_STARTED' || (!_navMode && _canFinish)) {
+      // если почему-то не переключились в навигацию, но canFinish уже true — дожимаем
+      _enterDriveMode();
+    }
+
+    // ===== 4. Позиция машины с бэка =====
     final pos = data['position'] as Map<String, dynamic>?;
     if (pos != null) {
       final lat = (pos['lat'] as num?)?.toDouble();
       final lng = (pos['lng'] as num?)?.toDouble();
       if (lat != null && lng != null) {
-        _updateDriverMarker(LatLng(lat, lng)); // рисуем иконку машины
+        _updateDriverMarker(LatLng(lat, lng));
       }
     }
 
-    // current route
+    // ===== 5. Текущий маршрут =====
     final route = data['route'] as Map<String, dynamic>?;
     if (route != null) {
       final rid = ApiService.asInt(route['id']);
@@ -695,7 +754,9 @@ class _DrivingMapPageState extends State<DrivingMapPage>
         final pts = decodePolyline(enc);
 
         if (mounted && !_disposed) {
-          setState(() { _polylines = {}; });
+          setState(() {
+            _polylines = {};
+          });
         }
 
         _setRoutePolyline(pts);
@@ -703,19 +764,14 @@ class _DrivingMapPageState extends State<DrivingMapPage>
       }
     }
 
-    // === PICKUP MODE ===
-    if (status == 'DRIVER_FOUND' || status == 'DRIVE_ARRIVED') {
-      _enterPickupMode();
-    }
-
-    if (_terminalStatuses.contains(status)) {
+    // ===== 6. Отмена поездки водителем (пуш с бэкенда) =====
+    if (status == 'DRIVE_CANCELLED_BY_DRIVER') {
       _stopDrivePolling();
       _routeId = null;
       _pickupMode = false;
       _canArrived = _canStart = _canCancel = _canFinish = false;
     }
 
-    debugPrint('[DrivePoll] handled DRIVE_CANCELLED_BY_CUSTOMER → reset & goHome');
     if (mounted && !_disposed) setState(() {});
   }
 
@@ -1171,7 +1227,8 @@ class _DrivingMapPageState extends State<DrivingMapPage>
                       Text(
                         t(context, 'driving.searching'),
                         style: theme.textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w600),
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ],
                   ),

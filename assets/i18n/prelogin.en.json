@@ -188,5 +188,6 @@
 
   "chat.title": "Chat",
   "chat.with": "Chat with driver",
-  "chat.placeholder": "Type a message…"
+  "chat.placeholder": "Type a message…",
+  "driving.new_order": "New order"
 }

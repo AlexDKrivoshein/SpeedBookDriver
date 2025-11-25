@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'chat_controller.dart';
 import 'chat_message.dart';
 import '../api_service.dart' as api;
+import '../fcm/messaging_service.dart';   // <<< добавлено
 
 class ChatSheet extends StatefulWidget {
   const ChatSheet({super.key});
@@ -17,22 +18,41 @@ class _ChatSheetState extends State<ChatSheet> {
   final _scroll = ScrollController();
   bool _inited = false;
 
+  ChatController? _attachedChat;   // <<< чтобы корректно detech в dispose
+
   String _t(BuildContext ctx, String key) =>
       api.ApiService.getTranslationForWidget(ctx, key);
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Ленивый старт: если ChatDock уже сделал init(), повторный вызов не критичен.
+
     if (!_inited) {
       _inited = true;
+
+      // 1) Берём ChatController из Provider
       final chat = context.read<ChatController>();
-      chat.init(); // идемпотентно: таймер перезапустится корректно
+
+      // 2) Запоминаем и прикрепляем его к MessagingService
+      _attachedChat = chat;
+      MessagingService.I.attachChatController(chat);   // <<< важно
+
+      // 3) Делаем init() в post-frame, чтобы не вызвать notify во время build
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        chat.init();
+      });
     }
   }
 
   @override
   void dispose() {
+    // аккуратно отвязываем контроллер, если мы его прикрепляли
+    if (_attachedChat != null) {
+      MessagingService.I.detachChatController(_attachedChat!);
+      _attachedChat = null;
+    }
+
     _controller.dispose();
     _scroll.dispose();
     super.dispose();
@@ -42,7 +62,7 @@ class _ChatSheetState extends State<ChatSheet> {
   Widget build(BuildContext context) {
     final chat = context.watch<ChatController>();
 
-    // Автоскролл к "низу" (reverse:true => offset 0) после любого билда
+    // автоскролл вниз
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scroll.hasClients) return;
       _scroll.animateTo(
@@ -53,7 +73,6 @@ class _ChatSheetState extends State<ChatSheet> {
     });
 
     return SafeArea(
-      // верхний инсет прячим, низ учитываем (клавиатура)
       top: false,
       child: Padding(
         padding: EdgeInsets.only(
@@ -102,10 +121,9 @@ class _ChatSheetState extends State<ChatSheet> {
             Expanded(
               child: ListView.builder(
                 controller: _scroll,
-                reverse: true, // последние снизу — привычная прокрутка
+                reverse: true,
                 itemCount: chat.items.length,
                 itemBuilder: (context, index) {
-                  // из-за reverse показываем с конца массива
                   final ChatMessage msg =
                   chat.items[chat.items.length - 1 - index];
                   return _Bubble(msg: msg, isMine: msg.isMine);
@@ -178,13 +196,14 @@ class _Bubble extends StatelessWidget {
     final radius = BorderRadius.only(
       topLeft: const Radius.circular(16),
       topRight: const Radius.circular(16),
-      bottomLeft:
-      isMine ? const Radius.circular(16) : const Radius.circular(4),
-      bottomRight:
-      isMine ? const Radius.circular(4) : const Radius.circular(16),
+      bottomLeft: isMine
+          ? const Radius.circular(16)
+          : const Radius.circular(4),
+      bottomRight: isMine
+          ? const Radius.circular(4)
+          : const Radius.circular(16),
     );
 
-    // Подпись отправителя (если сервер прислал fromName/toName)
     final String? senderLabel = msg.isMine
         ? null
         : (msg.fromName ?? (msg.from != null ? 'ID ${msg.from}' : null));

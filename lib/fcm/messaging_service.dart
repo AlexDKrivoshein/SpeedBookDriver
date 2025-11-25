@@ -2,6 +2,7 @@
 import 'dart:io';
 import 'dart:async';
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -12,6 +13,7 @@ import '../call/call_payload.dart';
 import '../call/agora_controller.dart';
 import '../call/incoming_call_page.dart';            // единый экран звонка
 import '../fcm/incoming_call_service.dart';         // стримы call_accepted / call_ended
+import '../chat/chat_controller.dart';              // <<< добавили
 
 /// Единая точка FCM + звонки.
 /// - foreground: слушает onMessage / onMessageOpenedApp / getInitialMessage и управляет UI
@@ -34,8 +36,34 @@ class MessagingService {
   static const Duration _inviteDedupWindow = Duration(seconds: 15);
   final Map<int, DateTime> _recentInvites = <int, DateTime>{};
 
+  // === Навигатор/контекст (UI-изолят) ===
   GlobalKey<NavigatorState>? _navKey;
   void attachNavigator(GlobalKey<NavigatorState> navKey) => _navKey = navKey;
+
+  BuildContext? get _ctx =>
+      _navKey?.currentState?.overlay?.context ?? _navKey?.currentContext;
+
+  void _showSnack(String msg) {
+    final ctx = _ctx;
+    if (ctx == null) return; // нет UI (бэкграунд/ранний старт) — пропускаем
+    ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  // === Активный ChatController (один чат на всё приложение) ==================
+
+  ChatController? _chatController;                           // <<<
+
+  /// Привязать активный контроллер чата (вызывается из UI, когда чат монтируется).
+  void attachChatController(ChatController controller) {     // <<<
+    _chatController = controller;
+  }
+
+  /// Отвязать контроллер чата (когда виджет/контроллер уничтожается).
+  void detachChatController(ChatController controller) {     // <<<
+    if (identical(_chatController, controller)) {
+      _chatController = null;
+    }
+  }
 
   // ======== Local Notifications (каналы + показ входящего) ========
 
@@ -49,6 +77,17 @@ class MessagingService {
     playSound: true,
     // Файл: android/app/src/main/res/raw/incoming_call.mp3
     sound: RawResourceAndroidNotificationSound('incoming_call'),
+    enableVibration: true,
+  );
+
+
+  static const AndroidNotificationChannel _chatChannel = AndroidNotificationChannel(
+    'sbtaxi_chats',                      // ID канала
+    'SpeedBook Chat Messages',           // Название канала в настройках Android
+    description: 'Notifications for chat messages',
+    importance: Importance.defaultImportance,
+    playSound: true,
+    sound: RawResourceAndroidNotificationSound('notification'), // твой обычный звук
     enableVibration: true,
   );
 
@@ -91,6 +130,10 @@ class MessagingService {
     await _ln
         .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(_icallChannel);
+
+    await _ln
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(_chatChannel);
   }
 
   Future<void> showIncomingCallNotification({
@@ -145,9 +188,7 @@ class MessagingService {
         final callId = int.tryParse('${data['call_id'] ?? ''}');
         final reason = (data['reason'] ?? type).toString();
         if (callId != null) {
-          // оповестить бэк, что увидели завершение
           try { await ApiService.callAndDecode('ack_call_end', {'call_id': callId}); } catch (_) {}
-          // пробросить событие для активных слушателей (если есть живой изолят/UI)
           IncomingCallService.markCallEnded(callId, reason: reason);
         }
       }
@@ -241,7 +282,12 @@ class MessagingService {
     final type = (data['type'] ?? '').toString().trim().toLowerCase();
     debugPrint('[FCM] $source type=$type data=$data');
 
+
     switch (type) {
+      case 'drive_offer': // 🔹 Офферы обрабатываются в main.dart / OfferNotifications
+        debugPrint('[FCM] $source drive_offer → handled in main/OfferNotifications, skip in MessagingService');
+        return;
+
       case 'call_invite':
         _handleCallInvite(data, source: source);
         return;
@@ -251,12 +297,15 @@ class MessagingService {
         _handleCallEnded(data, source: source);
         return;
 
-    // call_accepted → переводим UI в inProgress
       case 'call_accepted':
         final callId = int.tryParse('${data['call_id']}');
         if (callId != null) {
           IncomingCallService.markCallAccepted(callId);
         }
+        return;
+
+      case 'chat_message':
+        _handleChatMessage(data, source: source);
         return;
 
       default:
@@ -266,8 +315,41 @@ class MessagingService {
   }
 
   void _handleOtherTypes(Map<String, dynamic> data, {required String source}) {
-    // TODO: остальная логика пушей
     debugPrint('[FCM] $source other: $data');
+  }
+
+  void _handleChatMessage(Map<String, dynamic> data, {required String source}) {
+    final chatId  = int.tryParse('${data['chat_id'] ?? ''}');
+    final driveId = int.tryParse('${data['drive_id'] ?? ''}');
+
+    debugPrint('[FCM] $source chat_message: chat_id=$chatId drive_id=$driveId data=$data');
+
+    // 1) Если есть активный ChatController для этого drive_id — сразу подтягиваем новые сообщения
+    final controller = _chatController;
+    if (controller != null && driveId != null &&
+        controller.driveId == driveId) {
+      debugPrint('[FCM] $source chat_message → ChatController.pullNow()');
+      controller.pullNow();
+    }
+
+    final nav = _navKey?.currentState;
+    if (nav == null || driveId == null) {
+      debugPrint('[FCM] $source chat_message: no navigator or driveId, skip navigation');
+      return;
+    }
+
+    // 2) Навигацию делаем ТОЛЬКО для случаев, когда приложение открывают по пушу,
+    //    а не когда оно уже на экране (onMessage).
+    if (source == 'onMessageOpenedApp' || source == 'getInitialMessage') {
+      debugPrint('[FCM] $source chat_message → navigate to /drive (open_chat=true)');
+      nav.pushNamed(
+        '/drive',
+        arguments: {
+          'drive_id': driveId,
+          'open_chat': true,
+        },
+      );
+    }
   }
 
   // ======== Звонки ========
@@ -329,10 +411,7 @@ class MessagingService {
       // ✅ foreground: попробуем запросить микрофон ДО показа экрана
       final micOk = await _ensureMicPermission();
       if (!micOk) {
-        final ctx = nav.context;
-        ScaffoldMessenger.of(ctx).showSnackBar(
-          const SnackBar(content: Text('Microphone permission is required to answer')),
-        );
+        _showSnack('Microphone permission is required to answer');
         // экран всё равно покажем: вторую проверку сделаем на кнопке Accept
       }
 
@@ -362,16 +441,10 @@ class MessagingService {
           onAccept: (p) async {
             final ok = await _ensureMicPermission();
             if (!ok) {
-              final ctx = _navKey?.currentState?.overlay?.context ?? _navKey?.currentContext;
-              if (ctx != null) {
-                ScaffoldMessenger.of(ctx).showSnackBar(
-                  const SnackBar(content: Text('Microphone permission denied')),
-                );
-              }
+              _showSnack('Microphone permission denied');
               return; // не входим в канал без разрешения
             }
 
-            // Сообщаем бэку, что приняли
             try {
               await ApiService.callAndDecode('answer_call', {'call_id': p.callId});
             } catch (_) {}
@@ -380,20 +453,24 @@ class MessagingService {
             _activeCallId = p.callId;
             accepted = true;
 
-            // Закроем локалку, если вдруг была показана
             await hideIncomingCallNotification();
+            try {
+              debugPrint('[Agora] join start: channel=${payload.channel} uid=${payload.uid}');
+              await AgoraController.instance.join(
+                appId: p.appId,
+                token: p.token,
+                channel: p.channel,
+                uid: p.uid,
+                callId: p.callId,
+              );
+              debugPrint('[Agora] join awaited OK');
+            } catch (e, st) {
+              debugPrint('[Agora] join error: $e\n$st');
+              _showSnack('Call failed to start: $e');
+            }
 
-            // Подключаемся к Agora (+ callId)
-            await AgoraController.instance.join(
-              appId: p.appId,
-              token: p.token,
-              channel: p.channel,
-              uid: p.uid,
-              callId: p.callId,
-            );
-
-            // Заменяем входящий на тот же экран, но "идёт звонок"
-            final ctx = _navKey?.currentState?.overlay?.context ?? _navKey?.currentContext;
+            // Заменяем входящий на "идёт звонок"
+            final ctx = _ctx;
             if (ctx != null) {
               Navigator.of(ctx).pushReplacement(
                 IncomingCallPage.route(
@@ -425,21 +502,18 @@ class MessagingService {
               });
             } catch (_) {}
 
-            final ctx = _navKey?.currentState?.overlay?.context ?? _navKey?.currentContext;
+            final ctx = _ctx;
             if (ctx != null) {
               Navigator.of(ctx).maybePop();
             }
 
-            // Сбрасываем флаги для отказа
             _incomingOpen = false;
             _activeCallId = null;
 
-            // На всякий — уберём локалку
             await hideIncomingCallNotification();
           },
         ),
       ).then((_) {
-        // Если экран входящего закрылся БЕЗ accept → сбросить флаги
         if (!accepted) {
           _incomingOpen = false;
           _activeCallId = null;
@@ -468,7 +542,7 @@ class MessagingService {
 
   /// Закрыть экраны звонка при `call_end` / `call_cancelled`.
   void _handleCallEnded(Map<String, dynamic> data, {required String source}) {
-    final ctx = _navKey?.currentState?.overlay?.context ?? _navKey?.currentContext;
+    final ctx = _ctx;
     final endedId = int.tryParse('${data['call_id'] ?? ''}');
     final reason  = (data['reason'] ?? data['type'] ?? 'remote_hangup').toString();
 

@@ -188,5 +188,6 @@
 
   "chat.title": "Чат",
   "chat.with": "Чат с водителем",
-  "chat.placeholder": "Напишите сообщение…"
+  "chat.placeholder": "Напишите сообщение…",
+  "driving.new_order": "Новый заказ"
 }

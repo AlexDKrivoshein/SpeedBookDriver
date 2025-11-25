@@ -24,6 +24,9 @@ class ChatController extends ChangeNotifier {
   bool _loading = false;
   Timer? _pollTimer;
 
+  // защита от параллельных _pullNew()
+  bool _pullingNow = false;
+
   List<ChatMessage> get items => List.unmodifiable(_items);
   int get unreadCount => _unreadCount;
   bool get loading => _loading;
@@ -41,6 +44,10 @@ class ChatController extends ChangeNotifier {
     _pollTimer?.cancel();
     _pollTimer = null;
   }
+
+  /// Явный запрос новых сообщений (по FCM-сигналу и т.п.).
+  /// Дёргает ту же логику, что и таймер, но «по кнопке».
+  Future<void> pullNow() => _pullNew();
 
   // ==== data flow ============================================================
 
@@ -60,10 +67,14 @@ class ChatController extends ChangeNotifier {
 
   void _startPolling() {
     _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) => _pullNew());
+    _pollTimer =
+        Timer.periodic(const Duration(seconds: 15), (_) => _pullNew());
   }
 
   Future<void> _pullNew() async {
+    // не даём запуститься параллельно (например, таймер + FCM + ручной refresh)
+    if (_pullingNow) return;
+    _pullingNow = true;
     try {
       final fetched = await _fetchPage(
         limit: 50,
@@ -78,6 +89,8 @@ class ChatController extends ChangeNotifier {
       _applyFetched(fetched, initial: false);
     } catch (e, st) {
       debugPrint('[Chat] _pullNew error: $e\n$st');
+    } finally {
+      _pullingNow = false;
     }
   }
 
@@ -110,7 +123,8 @@ class ChatController extends ChangeNotifier {
       final m = _items[i];
       if (!m.isMine && !m.isRead) {
         final before = m.ts.isBefore(boundary.uptoTs);
-        final atSameTsAndId = m.ts.isAtSameMomentAs(boundary.uptoTs) && m.id <= uptoId;
+        final atSameTsAndId =
+            m.ts.isAtSameMomentAs(boundary.uptoTs) && m.id <= uptoId;
         if (before || atSameTsAndId) {
           _items[i] = m.copyWith(isRead: true);
           changed = true;
@@ -126,7 +140,6 @@ class ChatController extends ChangeNotifier {
         'drive_id': driveId,
         'upto': uptoIso,
         'upto_id': uptoId,
-        // 'for_user': <int?>  // можно не слать — сервер подставит текущего
       });
 
       // ожидаем: {status:OK, data:{affected, remaining_unread, next_unread_ts, next_unread_id}}
@@ -139,7 +152,6 @@ class ChatController extends ChangeNotifier {
           if (remaining != null) {
             _unreadCount = remaining; // синхронизируем бейдж с сервером
           }
-          // next_unread_ts/next_unread_id можно сохранить при желании
         }
       }
       notifyListeners();

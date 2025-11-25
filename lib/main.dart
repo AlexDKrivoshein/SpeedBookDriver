@@ -1,5 +1,6 @@
 // lib/main.dart
 import 'dart:io' show exit;
+import 'dart:convert'; // для jsonDecode
 import 'package:flutter/services.dart' show SystemNavigator;
 
 import 'package:flutter/material.dart';
@@ -30,6 +31,9 @@ import 'features/driving/driving_map_page.dart';
 
 // FCM/звонки
 import 'fcm/messaging_service.dart';
+
+// каналы/уведомления для офферов
+import 'fcm/offer_notifications.dart';
 
 // если DriverDetails объявлен тут:
 import 'driver_api.dart' show DriverDetails;
@@ -75,7 +79,7 @@ class GlobalRouteObserver extends RouteObserver<PageRoute<dynamic>> {
 
 final GlobalRouteObserver globalRouteObserver = GlobalRouteObserver();
 
-/// Канал уведомлений (должен совпадать с нативным)
+/// Канал уведомлений (общий, как и раньше — должен совпадать с нативным)
 const AndroidNotificationChannel kDefaultAndroidChannel =
 AndroidNotificationChannel(
   'sbdriver_channel',
@@ -148,10 +152,29 @@ Future<void> _initNotifications() async {
   await _fln.initialize(
     const InitializationSettings(android: androidInit, iOS: iosInit),
     onDidReceiveNotificationResponse: (resp) {
-      // payload — это строка с data.toString()
       final payload = resp.payload;
       if (payload != null && payload.isNotEmpty) {
-        // Простенький парсер: ключ=значение
+        // 1) Пытаемся распарсить JSON payload (новый формат для offer-нотификаций)
+        try {
+          final decoded = jsonDecode(payload);
+          if (decoded is Map<String, dynamic>) {
+            final type = (decoded['type'] ?? '').toString().toLowerCase();
+            if (type == 'drive_offer') {
+              final nav = navigatorKey.currentState;
+              if (nav != null) {
+                OfferNotifications.navigateToOffer(
+                  nav: nav,
+                  data: decoded,
+                );
+              }
+              return; // оффер уже обработан
+            }
+          }
+        } catch (_) {
+          // если payload не JSON — идём по старому пути ниже
+        }
+
+        // 2) Старая логика для legacy payload (data.toString())
         final cleaned = payload.replaceAll(RegExp(r'^{|}$'), '');
         final map = <String, String>{};
         for (final pair in cleaned.split(', ')) {
@@ -163,10 +186,14 @@ Future<void> _initNotifications() async {
     },
   );
 
+  // Общий канал (как раньше)
   await _fln
       .resolvePlatformSpecificImplementation<
       AndroidFlutterLocalNotificationsPlugin>()
       ?.createNotificationChannel(kDefaultAndroidChannel);
+
+  // Новый канал для офферов
+  await OfferNotifications.ensureChannel(_fln);
 
   final settings = await FirebaseMessaging.instance.requestPermission(
     alert: true,
@@ -218,6 +245,31 @@ Future<void> _showLocalNotification({
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
   await MessagingService.firebaseBackgroundHandler(message);
+
+  // Дополнительно: специальные каналы для некоторых типов
+  final data = message.data;
+  final type = (data['type'] ?? '').toString().toLowerCase();
+
+  if (type == 'drive_offer') {
+    await OfferNotifications.showFromRemoteMessage(
+      plugin: _fln,
+      message: message,
+    );
+  } else if (type == 'chat_message') {
+    // Чат: уведомление + open_chat=true для навигации
+    final copy = Map<String, dynamic>.from(data);
+    copy['open_chat'] = 'true';
+
+    final notif = message.notification;
+    final title = notif?.title ?? 'New message';
+    final body  = notif?.body  ?? 'You have a new chat message';
+
+    await _showLocalNotification(
+      title: title,
+      body: body,
+      data: copy,
+    );
+  }
 }
 
 Future<void> main() async {
@@ -241,24 +293,69 @@ Future<void> main() async {
   FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
     final data = message.data;
     final type = (data['type'] ?? '').toString().toLowerCase();
-    if (type != 'call_invite') {
+
+    if (type == 'drive_offer') {
+      // Специальная нотификация для оффера (звук+вибрация через отдельный канал)
+      await OfferNotifications.showFromRemoteMessage(
+        plugin: _fln,
+        message: message,
+      );
+    } else if (type == 'chat_message') {
+      // Чат: уведомление + open_chat=true для навигации
+      final copy = Map<String, dynamic>.from(data);
+      copy['open_chat'] = 'true';
+
+      final notif = message.notification;
+      final title = notif?.title ?? data['title'] ?? 'New message';
+      final body  = notif?.body  ?? data['body']  ?? 'You have a new chat message';
+
+      await _showLocalNotification(
+        title: title,
+        body: body,
+        data: copy,
+      );
+    } else if (type != 'call_invite') {
+      // Все остальные пуши (кроме звонка) — как раньше через общий канал
       final notif = message.notification;
       final title = notif?.title ?? data['title'];
       final body = notif?.body ?? data['body'];
       await _showLocalNotification(title: title, body: body, data: data);
     }
-    debugPrint('[FCM] foreground message: notif=${message.notification} data=$data');
+
+    debugPrint(
+        '[FCM] foreground message: notif=${message.notification} data=$data');
   });
 
   FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
     debugPrint('[FCM] onMessageOpenedApp: ${message.data}');
-    _handleNotificationNavigation(message.data);
+    final data = message.data;
+    final type = (data['type'] ?? '').toString().toLowerCase();
+
+    if (type == 'drive_offer') {
+      final nav = navigatorKey.currentState;
+      if (nav != null) {
+        OfferNotifications.navigateToOffer(nav: nav, data: data);
+      }
+      return;
+    }
+
+    _handleNotificationNavigation(data);
   });
 
   final initialMsg = await FirebaseMessaging.instance.getInitialMessage();
   if (initialMsg != null) {
     debugPrint('[FCM] getInitialMessage: ${initialMsg.data}');
-    _handleNotificationNavigation(initialMsg.data);
+    final data = initialMsg.data;
+    final type = (data['type'] ?? '').toString().toLowerCase();
+
+    if (type == 'drive_offer') {
+      final nav = navigatorKey.currentState;
+      if (nav != null) {
+        OfferNotifications.navigateToOffer(nav: nav, data: data);
+      }
+    } else {
+      _handleNotificationNavigation(data);
+    }
   }
 
   // Навигатор прикрепляем сразу
@@ -275,8 +372,7 @@ Future<void> main() async {
       final nav = navigatorKey.currentState;
       if (nav == null) return;
 
-      final top = GlobalRouteObserver.currentRouteName; // если используете наш наблюдатель
-      // антидребезг — используйте ваши переменные, как уже сделали выше
+      final top = GlobalRouteObserver.currentRouteName;
 
       if (driveId != null && driveId > 0) {
         if (_isNavigatingToDrive) return;
@@ -339,7 +435,7 @@ class MyApp extends StatelessWidget {
               debugShowCheckedModeBanner: false,
               navigatorObservers: [
                 appRouteObserver,
-                globalRouteObserver, // <— добавили
+                globalRouteObserver,
               ],
               theme: ThemeData(
                 useMaterial3: true,
@@ -356,12 +452,10 @@ class MyApp extends StatelessWidget {
                 GlobalWidgetsLocalizations.delegate,
                 GlobalCupertinoLocalizations.delegate,
               ],
-              // Базовые маршруты
               routes: {
                 '/': (_) => const _Root(),
                 '/login': (_) => const PhoneInputPage(),
               },
-              // Генерация экрана поездки с аргументами
               onGenerateRoute: (settings) {
                 if (settings.name == '/drive') {
                   int? driveId;
@@ -381,7 +475,6 @@ class MyApp extends StatelessWidget {
                     settings: const RouteSettings(name: '/drive'),
                     builder: (_) => DrivingMapPage(
                       driveId: driveId,
-                      // openChat пока не нужен виджету — игнорим
                     ),
                   );
                 }
@@ -432,7 +525,6 @@ class _RootState extends State<_Root> {
   }
 
   Future<void> _decideOnboarding() async {
-    // Debug → всегда онбординг
     if (kDebugMode) {
       setState(() {
         _needOnboarding = true;
@@ -441,7 +533,6 @@ class _RootState extends State<_Root> {
       return;
     }
 
-    // Release → авто язык и страна
     final prefs = await SharedPreferences.getInstance();
     final systemLocale = WidgetsBinding.instance.platformDispatcher.locale;
     final sysLang = (systemLocale.languageCode).toLowerCase();
@@ -551,8 +642,8 @@ class _RootState extends State<_Root> {
     });
   }
 
-  // ——— helpers ———
-  String _extractMsg(Map<String, dynamic> map, {String fallback = 'Error'}) {
+  String _extractMsg(Map<String, dynamic> map,
+      {String fallback = 'Error'}) {
     String msg = (map['message']?.toString() ?? '').trim();
     if (msg.isEmpty) {
       final data = map['data'];
@@ -584,7 +675,7 @@ class _RootState extends State<_Root> {
               try {
                 SystemNavigator.pop();
               } catch (_) {
-                exit(0); // fallback (нежелателен на iOS)
+                exit(0);
               }
             },
             child: const Text('OK'),
@@ -597,13 +688,15 @@ class _RootState extends State<_Root> {
   @override
   Widget build(BuildContext context) {
     if (_needOnboarding == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(
+          body: Center(child: CircularProgressIndicator()));
     }
     if (_needOnboarding == true) {
       return OnboardingPage(onDone: _onOnboardingDone);
     }
     if (_checkingInit) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(
+          body: Center(child: CircularProgressIndicator()));
     }
 
     if (!_isLoggedIn || !_hasSession) {
