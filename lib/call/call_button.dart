@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 import '../api_service.dart';
 import '../call/agora_controller.dart';
 import '../call/call_payload.dart';
 import '../call/incoming_call_page.dart';
+import '../call/permissions.dart';  // <-- добавили общий хелпер
 
 /// Кнопка "Позвонить" рядом с чатом
 class CallButton extends StatefulWidget {
@@ -26,20 +26,14 @@ class CallButton extends StatefulWidget {
 class _CallButtonState extends State<CallButton> {
   bool _loading = false;
 
-  Future<bool> _ensureMicPermission() async {
-    final s = await Permission.microphone.status;
-    if (s.isGranted) return true;
-    final r = await Permission.microphone.request();
-    return r.isGranted;
-  }
-
   Future<void> _startCall() async {
     if (_loading) return;
     setState(() => _loading = true);
 
     try {
-      // 1) Разрешение на микрофон ДО старта
-      if (!await _ensureMicPermission()) {
+      // 1) Проверка всех нужных пермишенов (микрофон, нотификации, BT и т.п.)
+      final ok = await CallPermissions.ensure();
+      if (!ok) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Microphone permission is required')),
@@ -101,7 +95,7 @@ class _CallButtonState extends State<CallButton> {
         token: token,
         uid: uid,
         appId: appId,
-        initiatorName: (peerName).toString().trim().isNotEmpty ? peerName : 'Calling...',
+        initiatorName: peerName.toString().trim().isNotEmpty ? peerName : 'Calling...',
         initiatorAvatar: peerAvatar,
         ringMs: 0, // для исходящего авто-таймаут не нужен
       );

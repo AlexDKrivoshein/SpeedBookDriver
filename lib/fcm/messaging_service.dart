@@ -11,6 +11,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../api_service.dart';
 import '../call/call_payload.dart';
 import '../call/agora_controller.dart';
+import '../call/permissions.dart';
 import '../call/incoming_call_page.dart';            // единый экран звонка
 import '../fcm/incoming_call_service.dart';         // стримы call_accepted / call_ended
 import '../chat/chat_controller.dart';              // <<< добавили
@@ -260,11 +261,8 @@ class MessagingService {
   }
 
   // === Mic permission helper ===
-  Future<bool> _ensureMicPermission() async {
-    final s = await Permission.microphone.status;
-    if (s.isGranted) return true;
-    final r = await Permission.microphone.request();
-    return r.isGranted;
+  Future<bool> _ensurePermissions() async {
+    return await CallPermissions.ensure();
   }
 
   // ======== Разбор входящих ========
@@ -409,7 +407,8 @@ class MessagingService {
       }
 
       // ✅ foreground: попробуем запросить микрофон ДО показа экрана
-      final micOk = await _ensureMicPermission();
+      final micOk = await CallPermissions.ensure();
+
       if (!micOk) {
         _showSnack('Microphone permission is required to answer');
         // экран всё равно покажем: вторую проверку сделаем на кнопке Accept
@@ -439,7 +438,7 @@ class MessagingService {
 
           // ✅ дубль-проверка на кнопке Accept
           onAccept: (p) async {
-            final ok = await _ensureMicPermission();
+            final ok = await CallPermissions.ensure();
             if (!ok) {
               _showSnack('Microphone permission denied');
               return; // не входим в канал без разрешения

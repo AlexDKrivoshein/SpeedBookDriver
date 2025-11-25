@@ -73,6 +73,9 @@ class _IncomingCallPageState extends State<IncomingCallPage> {
   StreamSubscription<int>? _acceptSub;
   StreamSubscription<CallEndInfo>? _endSub;
 
+  // === новое: состояние громкой связи ===
+  bool _speakerOn = false;
+
   @override
   void initState() {
     super.initState();
@@ -211,6 +214,18 @@ class _IncomingCallPageState extends State<IncomingCallPage> {
     if (widget.onHangup != null) await widget.onHangup!(widget.payload);
     if (mounted && (ModalRoute.of(context)?.isCurrent ?? false) && Navigator.of(context).canPop()) {
       Navigator.of(context).pop();
+    }
+  });
+
+  // === новое: переключение громкой связи ===
+  Future<void> _toggleSpeaker() => _guarded(() async {
+    final next = !_speakerOn;
+    setState(() => _speakerOn = next);
+    debugPrint('[CallUI] toggleSpeaker → $next');
+    try {
+      await AgoraController.instance.setSpeakerEnabled(next);
+    } catch (e, st) {
+      debugPrint('[CallUI] toggleSpeaker error: $e\n$st');
     }
   });
 
@@ -382,6 +397,13 @@ class _IncomingCallPageState extends State<IncomingCallPage> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             _ActionButton(
+              label: _speakerOn ? 'Speaker off' : 'Speaker on',
+              icon: _speakerOn ? Icons.hearing : Icons.volume_up,
+              bg: const Color(0xFF444444),
+              onTap: _toggleSpeaker,
+            ),
+            const SizedBox(width: 16),
+            _ActionButton(
               label: 'End',
               icon: Icons.call_end,
               bg: const Color(0xFFDA2C38),
@@ -415,7 +437,9 @@ class _ActionButton extends StatelessWidget {
         onPressed: onTap == null
             ? null
             : () {
-          try { onTap!(); } catch (e, st) {
+          try {
+            onTap!();
+          } catch (e, st) {
             debugPrint('[CallUI] onTap error: $e\n$st');
           }
         },

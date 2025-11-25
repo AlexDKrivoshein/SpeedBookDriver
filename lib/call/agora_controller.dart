@@ -19,7 +19,7 @@ class AgoraController {
     required String token,
     required String channel,
     required int uid,
-    int? callId, // <- НОВОЕ: опционально передаём идентификатор звонка
+    int? callId, // <- опционально передаём идентификатор звонка
   }) async {
     _callId = callId;
     _channelId = channel;
@@ -40,26 +40,17 @@ class AgoraController {
       _engine!.registerEventHandler(
         RtcEngineEventHandler(
           onJoinChannelSuccess: (RtcConnection connection, int elapsed) async {
-            debugPrint('[Agora] ✅ onJoinChannelSuccess uid=${connection.localUid} ch=${connection.channelId}');
-            // Небольшая задержка и попытка включить спикер
-            Future.delayed(const Duration(milliseconds: 250), () async {
-              try {
-                await _engine?.setEnableSpeakerphone(true);
-                debugPrint('[Agora] 🔊 speakerphone ON (after join)');
-              } catch (e) {
-                debugPrint('[Agora] setEnableSpeakerphone after join failed: $e');
-              }
-            });
+            debugPrint(
+              '[Agora] ✅ onJoinChannelSuccess uid=${connection.localUid} ch=${connection.channelId}',
+            );
+            // Раньше тут насильно включали громкую связь.
+            // Теперь начальный маршрут — как у обычного звонка (в ухо).
           },
 
           onFirstRemoteAudioDecoded: (RtcConnection _, int remoteUid, int __) async {
             debugPrint('[Agora] 🎧 onFirstRemoteAudioDecoded uid=$remoteUid');
-            try {
-              await _engine?.setEnableSpeakerphone(true);
-              debugPrint('[Agora] 🔊 speakerphone ON (after remote audio)');
-            } catch (e) {
-              debugPrint('[Agora] setEnableSpeakerphone after remote failed: $e');
-            }
+            // Раньше здесь тоже включали громкую связь,
+            // теперь управляем только по нажатию на кнопку в UI.
           },
 
           onRemoteAudioStateChanged: (
@@ -69,18 +60,22 @@ class AgoraController {
               RemoteAudioStateReason reason,
               int elapsed,
               ) {
-            debugPrint('[Agora] 🎚 onRemoteAudioStateChanged uid=$remoteUid state=$state reason=$reason');
+            debugPrint(
+              '[Agora] 🎚 onRemoteAudioStateChanged uid=$remoteUid state=$state reason=$reason',
+            );
           },
 
           // В 6.5.3 сигнатура без RtcConnection:
           onAudioRoutingChanged: (int routing) async {
             debugPrint('[Agora] 🔁 onAudioRoutingChanged routing=$routing');
-            try { await _engine?.setEnableSpeakerphone(true); } catch (_) {}
+            // Ничего не трогаем: авто-переключения на speakerphone убраны.
           },
 
           // 🔔 Главное: если удалённый участник ушёл — завершаем звонок наверху
           onUserOffline: (RtcConnection connection, int remoteUid, UserOfflineReasonType reason) {
-            debugPrint('[Agora] ❌ onUserOffline uid=$remoteUid reason=$reason callId=$_callId ch=${connection.channelId}');
+            debugPrint(
+              '[Agora] ❌ onUserOffline uid=$remoteUid reason=$reason callId=$_callId ch=${connection.channelId}',
+            );
             final cid = _callId;
             if (cid != null) {
               // Уведомляем UI/сервис о завершении вызова по причине remote_offline
@@ -99,9 +94,10 @@ class AgoraController {
       await _engine!.setChannelProfile(ChannelProfileType.channelProfileCommunication);
       await _engine!.setAudioScenario(AudioScenarioType.audioScenarioDefault);
 
-      // Только маршрут по умолчанию — ДО joinChannel
-      await _engine!.setDefaultAudioRouteToSpeakerphone(true);
-      // НЕ вызываем setEnableSpeakerphone здесь — даёт ERR_NOT_READY (-3)
+      // Только маршрут по умолчанию — ДО joinChannel.
+      // Для голосового звонка по умолчанию — в ухо, а не громкая связь.
+      await _engine!.setDefaultAudioRouteToSpeakerphone(false);
+      // НЕ вызываем setEnableSpeakerphone здесь — даёт ERR_NOT_READY (-3) и ломает начальный маршрут.
     }
 
     // === Вход в канал ===
@@ -116,6 +112,21 @@ class AgoraController {
     );
 
     debugPrint('[Agora] 🚀 joinChannel requested: channel=$channel uid=$uid callId=$_callId');
+  }
+
+  /// Включить/выключить громкую связь.
+  /// true  → звук идёт через спикер (громкий динамик)
+  /// false → обычный разговорный динамик / наушник
+  Future<void> setSpeakerEnabled(bool enabled) async {
+    if (_engine == null) return;
+    try {
+      await _engine!.setEnableSpeakerphone(enabled);
+      debugPrint(
+        '[Agora] 🔊 speaker=${enabled ? 'ON' : 'OFF'} callId=$_callId ch=$_channelId',
+      );
+    } catch (e, st) {
+      debugPrint('[Agora][Error] setSpeakerEnabled($enabled): $e\n$st');
+    }
   }
 
   Future<void> leave() async {

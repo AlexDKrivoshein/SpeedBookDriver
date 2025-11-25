@@ -1,31 +1,37 @@
-// permissions.dart (или рядом)
-import 'dart:io' show Platform;
+// call/permissions.dart
 import 'package:permission_handler/permission_handler.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 
 class CallPermissions {
+  /// Проверяет и запрашивает:
+  /// - микрофон
+  /// - уведомления (Android 13+)
+  /// - bluetoothConnect (Android 12+)
   static Future<bool> ensure() async {
-    // Микрофон — обязателен
+    // === 1. Микрофон ===
     final mic = await Permission.microphone.request();
-    if (!mic.isGranted) return false;
+    if (!mic.isGranted) {
+      return false;
+    }
 
-    // Нотификации — чтобы показать входящий call на Android 13+ (опц.)
-    if (await Permission.notification.isDenied) {
+    // === 2. Уведомления (Android 13+) ===
+    // Даже если юзер отказал — продолжаем работу звонка,
+    // но heads-up может не появиться.
+    final notifStatus = await Permission.notification.status;
+    if (notifStatus.isDenied) {
       await Permission.notification.request();
     }
 
-    // Андроид 12+ может требовать BT CONNECT, если Agora пытается рулить аудиомаршрутом через BT
-    if (Platform.isAndroid) {
-      final info = await DeviceInfoPlugin().androidInfo;
-      if (info.version.sdkInt >= 31) {
-        final bt = await Permission.bluetoothConnect.request();
-        // не блокируем звонок, но логируем
-        if (!bt.isGranted) {
-          // ignore: avoid_print
-          print('[Perm] BLUETOOTH_CONNECT not granted (will continue)');
-        }
+    // === 3. Bluetooth (для работы аудиомаршрутизации на API 31+) ===
+    final info = await DeviceInfoPlugin().androidInfo;
+    if (info.version.sdkInt >= 31) {
+      final bt = await Permission.bluetoothConnect.request();
+      if (!bt.isGranted) {
+        // всё еще продолжаем — система сама выберет маршрут.
+        // Но можно залогировать для отладки.
       }
     }
+
     return true;
   }
 }
