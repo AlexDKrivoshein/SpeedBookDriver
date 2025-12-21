@@ -34,8 +34,9 @@ class LocationService extends ChangeNotifier {
   }
 
   // ==== Настройки фильтров ====
-  int minDistanceMeters = 25; // отправляем только при сдвиге >= 25 м
-  Duration minInterval = const Duration(seconds: 10); // не чаще 1 раза в 10 сек
+  // Требования продукта: слать координаты каждые 5 сек без фильтра по дистанции
+  int minDistanceMeters = 0;
+  Duration minInterval = const Duration(seconds: 5);
 
   // ==== Хартбит ====
   /// Интервал принудительной отправки (даже без движения)
@@ -124,7 +125,7 @@ class LocationService extends ChangeNotifier {
     _posSub = Geolocator.getPositionStream(
       locationSettings: LocationSettings(
         accuracy: _accuracy,
-        distanceFilter: distanceFilter ?? 15,
+        distanceFilter: distanceFilter ?? 0,
       ),
     ).listen(
           (pos) => _onPosition(pos),

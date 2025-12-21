@@ -271,9 +271,9 @@ class _DrivingMapPageState extends State<DrivingMapPage>
     if (!LocationService.I.isRunning) {
       await LocationService.I.start(
         accuracy: LocationAccuracy.high,
-        distanceFilter: 20,
-        sendMinDistanceMeters: 25,
-        sendMinInterval: const Duration(seconds: 10),
+        distanceFilter: 0, // хотим обновления по времени, а не по дистанции
+        sendMinDistanceMeters: 0,
+        sendMinInterval: const Duration(seconds: 5),
       );
       if (!mounted || _disposed) return;
     }
