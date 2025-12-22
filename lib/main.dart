@@ -22,6 +22,7 @@ import 'route_observer.dart';
 import 'api_service.dart';
 import 'phone_input_page.dart';
 import 'location_service.dart';
+import 'foreground_location_service.dart';
 import 'permission_helper.dart';
 import 'onboarding_page.dart';
 import 'translations.dart';
@@ -274,6 +275,8 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await ForegroundLocationService.I.init();
 
   // Регистрируем фоновый обработчик FCM
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);

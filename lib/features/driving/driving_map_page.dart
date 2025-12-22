@@ -10,6 +10,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../../location_service.dart';
+import '../../foreground_location_service.dart';
 import '../../driver_api.dart';
 import '../../api_service.dart';
 import '../../chat/chat_dock.dart';
@@ -70,6 +71,9 @@ class _DrivingMapPageState extends State<DrivingMapPage>
   // терминальные статусы, при которых прекращаем опрос
   static const Set<String> _terminalStatuses = {
     'DRIVE_CANCELLED_BY_CUSTOMER', 'DRIVE_CANCELLED_BY_DRIVER', 'DRIVE_FINISHED'
+  };
+  static const Set<String> _tripStatuses = {
+    'DRIVER_FOUND', 'DRIVE_ARRIVED', 'DRIVE_STARTED'
   };
 
   // оффер/маршрут
@@ -685,6 +689,8 @@ class _DrivingMapPageState extends State<DrivingMapPage>
     }
 
     debugPrint('[Driving] status: $status');
+
+    await ForegroundLocationService.I.setTripActive(_tripStatuses.contains(status));
 
     // ===== 1. Клиент отменил поездку =====
     if (status == 'DRIVE_CANCELLED_BY_CUSTOMER' && !_stopSent) {
