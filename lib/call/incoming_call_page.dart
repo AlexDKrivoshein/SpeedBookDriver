@@ -384,6 +384,13 @@ class _IncomingCallPageState extends State<IncomingCallPage> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             _ActionButton(
+              label: _speakerOn ? 'Speaker off' : 'Speaker on',
+              icon: _speakerOn ? Icons.hearing : Icons.volume_up,
+              bg: const Color(0xFF444444),
+              onTap: _toggleSpeaker,
+            ),
+            const SizedBox(width: 16),
+            _ActionButton(
               label: 'Cancel',
               icon: Icons.call_end,
               bg: const Color(0xFFDA2C38),

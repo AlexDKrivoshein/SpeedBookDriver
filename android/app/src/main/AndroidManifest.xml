@@ -18,6 +18,10 @@
                 android:name="com.google.android.gms.permission.AD_ID"
                 tools:node="remove" />
 
+    <uses-permission
+                android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION"
+                tools:node="remove" />
+
     <application
             android:label="SpeedBook Taxi Driver"
             android:name=".MyApplication"
@@ -41,6 +45,14 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+
+        <activity
+                android:name="io.agora.rtc2.extensions.MediaProjectionMgr$LocalScreenCaptureAssistantActivity"
+                tools:node="remove" />
+
+        <service
+                android:name="io.agora.rtc2.extensions.MediaProjectionMgr$LocalScreenSharingService"
+                tools:node="remove" />
 
         <!-- Flutter -->
         <meta-data android:name="flutterEmbedding" android:value="2" />

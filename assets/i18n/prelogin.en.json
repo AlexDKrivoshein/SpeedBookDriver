@@ -184,10 +184,13 @@
   "driving.cancel_drive": "Cancel drive",
 
   "driving.finish": "Finish",
+  "driving.finish_confirm_title": "Finish trip?",
+  "driving.finish_confirm_body": "Are you sure you want to finish the trip?",
   "driving.finished": "Drive finished",
 
   "chat.title": "Chat",
   "chat.with": "Chat with driver",
   "chat.placeholder": "Type a message…",
-  "driving.new_order": "New order"
+  "driving.new_order": "New order",
+  "foreground.location_during_trip": "Sending location during trip"
 }

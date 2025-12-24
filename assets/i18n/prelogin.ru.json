@@ -184,10 +184,13 @@
   "driving.cancel_drive": "Отменить поездку",
 
   "driving.finish": "Завершить",
+  "driving.finish_confirm_title": "Завершить поездку?",
+  "driving.finish_confirm_body": "Вы уверены, что хотите завершить поездку?",
   "driving.finished": "Поездка завершена",
 
   "chat.title": "Чат",
   "chat.with": "Чат с водителем",
   "chat.placeholder": "Напишите сообщение…",
-  "driving.new_order": "Новый заказ"
+  "driving.new_order": "Новый заказ",
+  "foreground.location_during_trip": "Отправка геолокации во время поездки"
 }

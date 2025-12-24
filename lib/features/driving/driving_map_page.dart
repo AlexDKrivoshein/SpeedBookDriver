@@ -334,7 +334,7 @@ class _DrivingMapPageState extends State<DrivingMapPage>
     try {
       final r = await DriverApi.acceptDrive(requestId: reqId, driveId: driveId)
           .timeout(const Duration(seconds: 10));
-      
+
       debugPrint('[Driving] accept drive result: $r');
 
       if ((r['status'] ?? '').toString() == 'OK') {
@@ -455,8 +455,15 @@ class _DrivingMapPageState extends State<DrivingMapPage>
       try {
         final reply =
             await DriverApi.getOffers().timeout(const Duration(seconds: 10));
+        debugPrint('[pollOffers] reply: $reply');
 
         if (_disposed) return;
+
+        if (_isDriveSpoiled(reply)) {
+          await _startDrivingSafeFromLastPos();
+          await Future.delayed(const Duration(seconds: 3));
+          continue;
+        }
 
         // error: REQUEST_NOT FOUND -> сразу на главную
         final err = reply['error']?.toString();
@@ -535,6 +542,19 @@ class _DrivingMapPageState extends State<DrivingMapPage>
         await Future.delayed(const Duration(seconds: 3));
       }
     }
+  }
+
+  bool _isDriveSpoiled(Map<String, dynamic> reply) {
+    final status = (reply['status'] ?? '').toString();
+    final err = reply['error']?.toString();
+    if (status == 'DRIVE_IS_SPOILED' || err == 'DRIVE_IS_SPOILED') {
+      return true;
+    }
+    final data = reply['data'];
+    if (data is Map && data['result']?.toString() == 'DRIVE_IS_SPOILED') {
+      return true;
+    }
+    return false;
   }
 
   void _renderOfferRoute({
@@ -863,6 +883,9 @@ class _DrivingMapPageState extends State<DrivingMapPage>
     final did = _driveId;
     if (did == null || _actionBusy || _disposed) return;
 
+    final confirmed = await _confirmFinishDrive();
+    if (!confirmed || _disposed) return;
+
     if (mounted && !_disposed) setState(() => _actionBusy = true);
     try {
       final r =
@@ -892,6 +915,30 @@ class _DrivingMapPageState extends State<DrivingMapPage>
     } finally {
       if (mounted && !_disposed) setState(() => _actionBusy = false);
     }
+  }
+
+  Future<bool> _confirmFinishDrive() async {
+    if (!mounted || _disposed) return false;
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(t(context, 'driving.finish_confirm_title')),
+          content: Text(t(context, 'driving.finish_confirm_body')),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(t(context, 'common.cancel')),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(t(context, 'common.ok')),
+            ),
+          ],
+        );
+      },
+    );
+    return result ?? false;
   }
 
   Future<void> _onCancelDrivePressed() async {

@@ -184,11 +184,14 @@
   "driving.cancel_drive": "បោះបង់ដំណើរ",
 
   "driving.finish": "បញ្ចប់",
+  "driving.finish_confirm_title": "បញ្ចប់ដំណើរមែនទេ?",
+  "driving.finish_confirm_body": "តើអ្នកប្រាកដថាចង់បញ្ចប់ដំណើរទេ?",
   "driving.finished": "ដំណើរបានបញ្ចប់",
 
   "chat.title": "ក ារជជ ែក",
   "chat.with": "ជជ ែកជ ាម ួយអ ្នកប ើកបរ",
   "chat.placeholder": "វ ាយស ាររបស ់អ ្នក…",
 
-  "driving.new_order": "ការបញ្ជាទិញថ្មី"
+  "driving.new_order": "ការបញ្ជាទិញថ្មី",
+  "foreground.location_during_trip": "កំពុងផ្ញើទីតាំងអំឡុងពេលការធ្វើដំណើរ"
 }
