@@ -572,25 +572,6 @@ class _RootState extends State<_Root> {
     FirebaseAuth.instance.authStateChanges().listen((user) async {
       _isLoggedIn = user != null;
 
-      if (kDebugMode) {
-        final prefs = await SharedPreferences.getInstance();
-        final savedLang =
-        (prefs.getString('user_lang') ?? '').toLowerCase();
-        final lang = savedLang.isNotEmpty
-            ? savedLang
-            : WidgetsBinding.instance.platformDispatcher.locale.languageCode
-            .toLowerCase();
-
-        if (mounted) {
-          await context.read<Translations>().setLang(lang);
-          setState(() {
-            _hasSession = _isLoggedIn;
-            _checkingInit = false;
-          });
-        }
-        return;
-      }
-
       if (_isLoggedIn) {
         final sessionReady = await _waitForBackendSession();
         if (!sessionReady) {
