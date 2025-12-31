@@ -181,6 +181,61 @@ class _HomePageState extends State<HomePage> with RouteAware {
     );
   }
 
+  Future<void> _openPayoutDialog(DriverAccount account) async {
+    if (account.id == null || account.id!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(t(context, 'home.payout.error_no_account'))),
+      );
+      return;
+    }
+
+    final success = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => _PayoutDialog(
+        account: account,
+        onSubmit: (bankAccount, amount) => _createPayout(
+          account: account,
+          bankAccount: bankAccount,
+          amount: amount,
+        ),
+      ),
+    );
+    if (success == true) {
+      await _load();
+    }
+  }
+
+  Future<String?> _createPayout({
+    required DriverAccount account,
+    required String bankAccount,
+    required double amount,
+  }) async {
+    try {
+      final res = await ApiService.callAndDecode(
+        'create_aba_payout',
+        {
+          'account': bankAccount,
+          'amount': amount,
+          'my_account_id': account.id,
+        },
+      );
+      final status = (res['status'] ?? '').toString().toUpperCase();
+      if (status != 'OK') {
+        final msg = (res['message'] ?? res['error'] ?? t(context, 'home.payout.error_failed'))
+            .toString();
+        return msg;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(t(context, 'home.payout.success'))),
+        );
+      }
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
   Future<void> _setReferal() async {
     final id = _referalCtrl.text.trim();
     if (id.isEmpty) {
@@ -528,6 +583,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
                     currentIndex: _currentPage,
                     onPageChanged: (i) => setState(() => _currentPage = i),
                     emptyLabel: t(context, 'home.accounts.empty'),
+                    onPayout: _openPayoutDialog,
                   ),
                   if (accounts.isNotEmpty) ...[
                     const SizedBox(height: 6),
@@ -594,6 +650,138 @@ class _HomePageState extends State<HomePage> with RouteAware {
         ),
       ),
     );
+  }
+}
+
+class _PayoutDialog extends StatefulWidget {
+  const _PayoutDialog({
+    required this.account,
+    required this.onSubmit,
+  });
+
+  final DriverAccount account;
+  final Future<String?> Function(String bankAccount, double amount) onSubmit;
+
+  @override
+  State<_PayoutDialog> createState() => _PayoutDialogState();
+}
+
+class _PayoutDialogState extends State<_PayoutDialog> {
+  late final TextEditingController _bankCtrl;
+  late final TextEditingController _amountCtrl;
+  String? _errorText;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _bankCtrl = TextEditingController();
+    _amountCtrl = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _bankCtrl.dispose();
+    _amountCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(t(context, 'home.payout.title')),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _bankCtrl,
+              decoration: InputDecoration(
+                labelText: t(context, 'home.payout.bank_account'),
+              ),
+              textInputAction: TextInputAction.next,
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _amountCtrl,
+              decoration: InputDecoration(
+                labelText: t(context, 'home.payout.amount'),
+                helperText:
+                    '${t(context, 'home.payout.max')}: ${widget.account.balance} ${widget.account.currency}',
+              ),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            ),
+            if (_errorText != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                _errorText!,
+                style: const TextStyle(color: Colors.red),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.of(context).pop(false),
+          child: Text(t(context, 'common.cancel')),
+        ),
+        FilledButton(
+          onPressed: _busy ? null : _onSubmit,
+          child: Text(t(context, 'home.payout.button')),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _onSubmit() async {
+    final bankAccount = _bankCtrl.text.trim();
+    final rawAmount = _amountCtrl.text.trim().replaceAll(',', '.');
+    final amount = double.tryParse(rawAmount);
+    if (bankAccount.isEmpty) {
+      setState(() => _errorText = t(context, 'home.payout.error_bank_account'));
+      return;
+    }
+    if (amount == null || amount <= 0) {
+      setState(() => _errorText = t(context, 'home.payout.error_amount'));
+      return;
+    }
+    if (amount > widget.account.balance) {
+      setState(() => _errorText = t(context, 'home.payout.error_exceeds'));
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (confirmCtx) => AlertDialog(
+        title: Text(t(context, 'home.payout.confirm_title')),
+        content: Text(t(context, 'home.payout.confirm_body')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(confirmCtx).pop(false),
+            child: Text(t(context, 'common.cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(confirmCtx).pop(true),
+            child: Text(t(context, 'home.payout.button')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    setState(() => _busy = true);
+    final err = await widget.onSubmit(bankAccount, amount);
+    if (!mounted) return;
+    if (err != null) {
+      setState(() {
+        _busy = false;
+        _errorText = err;
+      });
+      return;
+    }
+    Navigator.of(context).pop(true);
   }
 }
 

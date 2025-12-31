@@ -4,23 +4,35 @@ import 'api_service.dart';
 import 'dart:convert';
 
 class DriverAccount {
+  final String? id;
   final String name;
   final String currency;
   final double balance;
+  final bool isMain;
 
   DriverAccount({
+    this.id,
     required this.name,
     required this.currency,
     required this.balance,
+    this.isMain = false,
   });
 
   factory DriverAccount.fromJson(Map<String, dynamic> json) {
+    final name = json['name']?.toString() ?? '';
+    final type = json['type']?.toString().toLowerCase();
+    final idRaw = json['id'] ?? json['account_id'] ?? json['my_account_id'];
     return DriverAccount(
-      name: json['name']?.toString() ?? '',
+      id: idRaw?.toString(),
+      name: name,
       currency: json['currency']?.toString() ?? '',
       balance: (json['balance'] is num)
           ? (json['balance'] as num).toDouble()
           : double.tryParse(json['balance']?.toString() ?? '0') ?? 0.0,
+      isMain: json['is_main'] == true ||
+          json['main'] == true ||
+          type == 'main' ||
+          name.toLowerCase().contains('main'),
     );
   }
 }
@@ -456,4 +468,3 @@ class DriverApi {
     return null;
   }
 }
-

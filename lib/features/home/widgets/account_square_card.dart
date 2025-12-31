@@ -5,7 +5,15 @@ import '../../../api_service.dart';
 class AccountSquareCard extends StatelessWidget {
   final DriverAccount account;
   final bool highlighted;
-  const AccountSquareCard({super.key, required this.account, this.highlighted = false});
+  final VoidCallback? onPayout;
+  final bool showPayout;
+  const AccountSquareCard({
+    super.key,
+    required this.account,
+    this.highlighted = false,
+    this.onPayout,
+    this.showPayout = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -14,7 +22,7 @@ class AccountSquareCard extends StatelessWidget {
       aspectRatio: 1,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: theme.colorScheme.surface,
           borderRadius: BorderRadius.circular(14),
@@ -36,12 +44,27 @@ class AccountSquareCard extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
             ),
-            const Spacer(),
+            const SizedBox(height: 4),
             Text(
               _formatMoney(account.balance, account.currency),
               style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
             ),
-            const SizedBox(height: 6),
+            if (showPayout) ...[
+              const SizedBox(height: 6),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.tonal(
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    minimumSize: const Size.fromHeight(28),
+                    textStyle: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                  onPressed: onPayout,
+                  child: Text(ApiService.getTranslationForWidget(context, 'home.payout.button')),
+                ),
+              ),
+            ],
+            const Spacer(),
             Row(
               children: [
                 Icon(Icons.account_balance_wallet, size: 16, color: theme.hintColor),
