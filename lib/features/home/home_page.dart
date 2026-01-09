@@ -5,10 +5,9 @@ import 'package:flutter/services.dart';
 // + добавлено для меню/логаута/языка
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:provider/provider.dart';
-import '../../translations.dart';
 
 import '../../api_service.dart';
+import '../../translations.dart';
 import '../../driver_api.dart';
 import '../../brand.dart';
 import '../../brand_header.dart';
@@ -21,19 +20,17 @@ import 'delete_account.dart';
 import 'widgets/background.dart';
 import 'widgets/info_card.dart';
 import 'widgets/verification_badge.dart';
-import 'widgets/referral_card.dart';      // панель привязки к рефералу (ввод кода)
+import 'widgets/referral_card.dart'; // панель привязки к рефералу (ввод кода)
 import 'widgets/car_section.dart';
 import 'widgets/accounts_carousel.dart';
 import 'widgets/dots.dart';
 import 'widgets/home_menu.dart';
+import 'widgets/settings_sheet.dart';
 import 'widgets/transactions_section.dart';
 import '../driving/driving_map_page.dart';
 
 // шарящий ReferralCard (Branch/QR) — отдельный виджет
 import '../referral/referral_card.dart' as Share;
-
-String t(BuildContext context, String key) =>
-    ApiService.getTranslationForWidget(context, key);
 
 enum DriverVerificationStatus {
   needVerification,
@@ -189,19 +186,128 @@ class _HomePageState extends State<HomePage> with RouteAware {
       return;
     }
 
-    final success = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => _PayoutDialog(
-        account: account,
-        onSubmit: (bankAccount, amount) => _createPayout(
-          account: account,
-          bankAccount: bankAccount,
-          amount: amount,
+    final bankCtrl = TextEditingController();
+    final amountCtrl = TextEditingController();
+    String? errorText;
+    var busy = false;
+
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => StatefulBuilder(
+          builder: (ctx, setState) => AlertDialog(
+            title: Text(t(context, 'home.payout.title')),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: bankCtrl,
+                    decoration: InputDecoration(
+                      labelText: t(context, 'home.payout.bank_account'),
+                    ),
+                    textInputAction: TextInputAction.next,
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: amountCtrl,
+                    decoration: InputDecoration(
+                      labelText: t(context, 'home.payout.amount'),
+                      helperText:
+                          '${t(context, 'home.payout.max')}: ${account.balance} ${account.currency}',
+                    ),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                  ),
+                  if (errorText != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      errorText!,
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: busy ? null : () => Navigator.of(ctx).pop(),
+                child: Text(t(context, 'common.cancel')),
+              ),
+              FilledButton(
+                onPressed: busy
+                    ? null
+                    : () async {
+                        final bankAccount = bankCtrl.text.trim();
+                        final rawAmount =
+                            amountCtrl.text.trim().replaceAll(',', '.');
+                        final amount = double.tryParse(rawAmount);
+                        if (bankAccount.isEmpty) {
+                          setState(() => errorText =
+                              t(context, 'home.payout.error_bank_account'));
+                          return;
+                        }
+                        if (amount == null || amount <= 0) {
+                          setState(() => errorText =
+                              t(context, 'home.payout.error_amount'));
+                          return;
+                        }
+                        if (amount > account.balance) {
+                          setState(() => errorText =
+                              t(context, 'home.payout.error_exceeds'));
+                          return;
+                        }
+
+                        final confirmed = await showDialog<bool>(
+                          context: ctx,
+                          barrierDismissible: false,
+                          builder: (confirmCtx) => AlertDialog(
+                            title:
+                                Text(t(context, 'home.payout.confirm_title')),
+                            content:
+                                Text(t(context, 'home.payout.confirm_body')),
+                            actions: [
+                              TextButton(
+                                onPressed: () =>
+                                    Navigator.of(confirmCtx).pop(false),
+                                child: Text(t(context, 'common.cancel')),
+                              ),
+                              FilledButton(
+                                onPressed: () =>
+                                    Navigator.of(confirmCtx).pop(true),
+                                child: Text(t(context, 'home.payout.button')),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirmed != true) return;
+
+                        setState(() => busy = true);
+                        final err = await _createPayout(
+                          account: account,
+                          bankAccount: bankAccount,
+                          amount: amount,
+                        );
+                        if (!mounted) return;
+                        if (err != null) {
+                          setState(() {
+                            busy = false;
+                            errorText = err;
+                          });
+                          return;
+                        }
+                        Navigator.of(ctx).pop();
+                        await _load();
+                      },
+                child: Text(t(context, 'home.payout.button')),
+              ),
+            ],
+          ),
         ),
-      ),
-    );
-    if (success == true) {
-      await _load();
+      );
+    } finally {
+      bankCtrl.dispose();
+      amountCtrl.dispose();
     }
   }
 
@@ -215,13 +321,15 @@ class _HomePageState extends State<HomePage> with RouteAware {
         'create_aba_payout',
         {
           'account': bankAccount,
-          'amount': amount,
+          'amout': amount,
           'my_account_id': account.id,
         },
       );
       final status = (res['status'] ?? '').toString().toUpperCase();
       if (status != 'OK') {
-        final msg = (res['message'] ?? res['error'] ?? t(context, 'home.payout.error_failed'))
+        final msg = (res['message'] ??
+                res['error'] ??
+                t(context, 'home.payout.error_failed'))
             .toString();
         return msg;
       }
@@ -251,7 +359,8 @@ class _HomePageState extends State<HomePage> with RouteAware {
       if (res['status'] != 'OK') {
         final code = res['message']?.toString() ?? 'unknown_error';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${t(context, 'home.referral.error')}: $code')),
+          SnackBar(
+              content: Text('${t(context, 'home.referral.error')}: $code')),
         );
         return;
       }
@@ -316,25 +425,6 @@ class _HomePageState extends State<HomePage> with RouteAware {
         );
       },
     );
-  }
-
-  Future<void> _pickLanguage(BuildContext context) async {
-    final prefs = await SharedPreferences.getInstance();
-    final current = (prefs.getString('user_lang') ?? 'en').toLowerCase();
-    final choice = await showModalBottomSheet<String>(
-      context: context,
-      useSafeArea: true,
-      showDragHandle: true,
-      builder: (ctx) => _LanguageSheet(current: current, t: (k) => t(ctx, k)),
-    );
-    if (choice != null && mounted) {
-      await prefs.setString('user_lang', choice);
-      // если Translations подключён — применим на лету
-      try {
-        await context.read<Translations>().setLang(choice);
-      } catch (_) {}
-      setState(() {});
-    }
   }
 
   Future<void> _logout(BuildContext context) async {
@@ -421,6 +511,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
           onMenuTap: () => _scaffoldKey.currentState?.openDrawer(),
         ),
         drawer: HomeMenu(
+          rootContext: context,
           details: d,
           onInvite: _openShareReferral,
           onOpenVerification: _openVerification,
@@ -445,7 +536,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
               SnackBar(content: Text(t(context, 'common.not_implemented'))),
             );
           },
-          onPickLanguage: _pickLanguage,
+          onPickLanguage: (ctx) => SettingsSheet.changeLanguage(ctx, t: t),
           onLogout: _logout,
           onDeleteAccount: deleteAccountFlow,
         ),
@@ -479,15 +570,18 @@ class _HomePageState extends State<HomePage> with RouteAware {
                                   Expanded(
                                     child: Text(
                                       d.name.isEmpty ? '—' : d.name,
-                                      style: theme.textTheme.titleMedium?.copyWith(
+                                      style:
+                                          theme.textTheme.titleMedium?.copyWith(
                                         fontWeight: FontWeight.w700,
                                       ),
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
-                                  if (status == DriverVerificationStatus.verified) ...[
+                                  if (status ==
+                                      DriverVerificationStatus.verified) ...[
                                     const SizedBox(width: 8),
-                                    const Icon(Icons.verified, size: 18, color: Colors.green),
+                                    const Icon(Icons.verified,
+                                        size: 18, color: Colors.green),
                                   ],
                                 ],
                               ),
@@ -514,10 +608,14 @@ class _HomePageState extends State<HomePage> with RouteAware {
                                     tooltip: t(context, 'common.copy'),
                                     icon: const Icon(Icons.copy, size: 18),
                                     onPressed: () async {
-                                      await Clipboard.setData(ClipboardData(text: d.id.toString()));
+                                      await Clipboard.setData(
+                                          ClipboardData(text: d.id.toString()));
                                       if (context.mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(content: Text(t(context, 'common.copied'))),
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          SnackBar(
+                                              content: Text(
+                                                  t(context, 'common.copied'))),
                                         );
                                       }
                                     },
@@ -562,11 +660,11 @@ class _HomePageState extends State<HomePage> with RouteAware {
                     brand: d.brand,
                     model: d.model,
                     color: d.color,
-                    carClass: d.carClass,            // NOCAR | AWAITING | REJECTED
-                    carReason: d.carReason,          // причина (если REJECTED)
+                    carClass: d.carClass, // NOCAR | AWAITING | REJECTED
+                    carReason: d.carReason, // причина (если REJECTED)
                     onAddCar: _onAddCar,
                     onBookRental: _onBookRental,
-                    onStartDriving: _openDriving,    // переход на карту
+                    onStartDriving: _openDriving, // переход на карту
                     t: (k) => t(context, k),
                   ),
                   const SizedBox(height: 12),
@@ -574,7 +672,8 @@ class _HomePageState extends State<HomePage> with RouteAware {
                   // Accounts
                   Text(
                     t(context, 'home.accounts.title'),
-                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                    style: theme.textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 8),
                   AccountsCarousel(
@@ -599,21 +698,26 @@ class _HomePageState extends State<HomePage> with RouteAware {
                         children: [
                           Text(
                             t(context, 'home.verification.title'),
-                            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                            style: theme.textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w600),
                           ),
                           const SizedBox(height: 8),
                           VerificationBadge(status: status),
                           if (status == DriverVerificationStatus.rejected &&
-                              (_details?.rejectionReason?.isNotEmpty ?? false)) ...[
+                              (_details?.rejectionReason?.isNotEmpty ??
+                                  false)) ...[
                             const SizedBox(height: 8),
                             Text(
                               t(context, 'home.verification.rejected_reason'),
-                              style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                              style: theme.textTheme.bodyMedium
+                                  ?.copyWith(fontWeight: FontWeight.w600),
                             ),
                             const SizedBox(height: 4),
-                            Text(_details!.rejectionReason!, style: theme.textTheme.bodyMedium),
+                            Text(_details!.rejectionReason!,
+                                style: theme.textTheme.bodyMedium),
                           ],
-                          if (status == DriverVerificationStatus.needVerification ||
+                          if (status ==
+                                  DriverVerificationStatus.needVerification ||
                               status == DriverVerificationStatus.rejected) ...[
                             const SizedBox(height: 12),
                             SizedBox(
@@ -648,180 +752,6 @@ class _HomePageState extends State<HomePage> with RouteAware {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _PayoutDialog extends StatefulWidget {
-  const _PayoutDialog({
-    required this.account,
-    required this.onSubmit,
-  });
-
-  final DriverAccount account;
-  final Future<String?> Function(String bankAccount, double amount) onSubmit;
-
-  @override
-  State<_PayoutDialog> createState() => _PayoutDialogState();
-}
-
-class _PayoutDialogState extends State<_PayoutDialog> {
-  late final TextEditingController _bankCtrl;
-  late final TextEditingController _amountCtrl;
-  String? _errorText;
-  bool _busy = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _bankCtrl = TextEditingController();
-    _amountCtrl = TextEditingController();
-  }
-
-  @override
-  void dispose() {
-    _bankCtrl.dispose();
-    _amountCtrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(t(context, 'home.payout.title')),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _bankCtrl,
-              decoration: InputDecoration(
-                labelText: t(context, 'home.payout.bank_account'),
-              ),
-              textInputAction: TextInputAction.next,
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _amountCtrl,
-              decoration: InputDecoration(
-                labelText: t(context, 'home.payout.amount'),
-                helperText:
-                    '${t(context, 'home.payout.max')}: ${widget.account.balance} ${widget.account.currency}',
-              ),
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            ),
-            if (_errorText != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                _errorText!,
-                style: const TextStyle(color: Colors.red),
-              ),
-            ],
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _busy ? null : () => Navigator.of(context).pop(false),
-          child: Text(t(context, 'common.cancel')),
-        ),
-        FilledButton(
-          onPressed: _busy ? null : _onSubmit,
-          child: Text(t(context, 'home.payout.button')),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _onSubmit() async {
-    final bankAccount = _bankCtrl.text.trim();
-    final rawAmount = _amountCtrl.text.trim().replaceAll(',', '.');
-    final amount = double.tryParse(rawAmount);
-    if (bankAccount.isEmpty) {
-      setState(() => _errorText = t(context, 'home.payout.error_bank_account'));
-      return;
-    }
-    if (amount == null || amount <= 0) {
-      setState(() => _errorText = t(context, 'home.payout.error_amount'));
-      return;
-    }
-    if (amount > widget.account.balance) {
-      setState(() => _errorText = t(context, 'home.payout.error_exceeds'));
-      return;
-    }
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (confirmCtx) => AlertDialog(
-        title: Text(t(context, 'home.payout.confirm_title')),
-        content: Text(t(context, 'home.payout.confirm_body')),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(confirmCtx).pop(false),
-            child: Text(t(context, 'common.cancel')),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(confirmCtx).pop(true),
-            child: Text(t(context, 'home.payout.button')),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-
-    setState(() => _busy = true);
-    final err = await widget.onSubmit(bankAccount, amount);
-    if (!mounted) return;
-    if (err != null) {
-      setState(() {
-        _busy = false;
-        _errorText = err;
-      });
-      return;
-    }
-    Navigator.of(context).pop(true);
-  }
-}
-
-// ─── простой выбор языка ───────────────────────────────────────────────────────
-
-class _LanguageSheet extends StatelessWidget {
-  const _LanguageSheet({required this.current, required this.t});
-  final String current;
-  final String Function(String) t;
-
-  @override
-  Widget build(BuildContext context) {
-    final items = const [
-      {'code': 'en', 'label': 'English'},
-      {'code': 'ru', 'label': 'Русский'},
-      {'code': 'km', 'label': 'ខ្មែរ'},
-    ];
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            t('menu.language'),
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 8),
-          for (final it in items)
-            ListTile(
-              leading: Icon(
-                it['code'] == current
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_off,
-              ),
-              title: Text(it['label']!),
-              onTap: () => Navigator.of(context).pop(it['code']),
-            ),
-        ],
       ),
     );
   }

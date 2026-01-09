@@ -8,9 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import 'api_service.dart';
 import 'brand.dart';
 import 'brand_header.dart';
-
-String t(BuildContext context, String key) =>
-    ApiService.getTranslationForWidget(context, key);
+import 'translations.dart';
 
 class VerificationPage extends StatefulWidget {
   const VerificationPage({super.key});
@@ -275,9 +273,6 @@ class _NameStep extends StatelessWidget {
   final TextEditingController nameCtrl;
   const _NameStep({required this.formKey, required this.nameCtrl});
 
-  String t(BuildContext context, String key) =>
-      ApiService.getTranslationForWidget(context, key);
-
   @override
   Widget build(BuildContext context) {
     return Form(
@@ -310,9 +305,6 @@ class _DocStep extends StatelessWidget {
     required this.hint,
     required this.onTake,
   });
-
-  String t(BuildContext context, String key) =>
-      ApiService.getTranslationForWidget(context, key);
 
   @override
   Widget build(BuildContext context) {

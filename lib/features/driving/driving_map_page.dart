@@ -13,14 +13,12 @@ import '../../location_service.dart';
 import '../../foreground_location_service.dart';
 import '../../driver_api.dart';
 import '../../api_service.dart';
+import '../../translations.dart';
 import '../../chat/chat_dock.dart';
 import 'ui/pickup_action_bar.dart';
 import 'ui/offer_sheet.dart';
 import 'map/route_utils.dart';
 import '../../call/call_button.dart';
-
-String t(BuildContext context, String key) =>
-    ApiService.getTranslationForWidget(context, key);
 
 class DrivingMapPage extends StatefulWidget {
   const DrivingMapPage({super.key, this.driveId});

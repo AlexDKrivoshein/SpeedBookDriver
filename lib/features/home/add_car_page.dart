@@ -8,9 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../brand_header.dart';
 import '../../api_service.dart';
 import '../../driver_api.dart';
-
-String t(BuildContext context, String key) =>
-    ApiService.getTranslationForWidget(context, key);
+import '../../translations.dart';
 
 class AddCarPage extends StatefulWidget {
   const AddCarPage({super.key});

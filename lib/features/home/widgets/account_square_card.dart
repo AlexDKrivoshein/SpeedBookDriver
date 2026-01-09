@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../driver_api.dart';
-import '../../../api_service.dart';
+import '../../../translations.dart';
 
 class AccountSquareCard extends StatelessWidget {
   final DriverAccount account;
@@ -38,7 +38,7 @@ class AccountSquareCard extends StatelessWidget {
           children: [
             Text(
               account.name.isEmpty
-                  ? ApiService.getTranslationForWidget(context, 'home.account.default_name')
+                  ? t(context, 'home.account.default_name')
                   : account.name,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
@@ -60,7 +60,7 @@ class AccountSquareCard extends StatelessWidget {
                     textStyle: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700),
                   ),
                   onPressed: onPayout,
-                  child: Text(ApiService.getTranslationForWidget(context, 'home.payout.button')),
+                  child: Text(t(context, 'home.payout.button')),
                 ),
               ),
             ],

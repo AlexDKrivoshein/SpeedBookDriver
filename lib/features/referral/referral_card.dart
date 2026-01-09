@@ -9,11 +9,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../brand.dart';
-import '../../api_service.dart';
-
-// короткий алиас для переводов
-String t(BuildContext context, String key) =>
-    ApiService.getTranslationForWidget(context, key);
+import '../../translations.dart';
 
 /// ReferralCard — карточка «Пригласить друга»
 /// генерирует умную ссылку Branch (deferred deep link),

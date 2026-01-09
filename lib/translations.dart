@@ -15,7 +15,9 @@ class Translations extends ChangeNotifier {
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getString('user_lang');
-    _lang = (saved ?? WidgetsBinding.instance.platformDispatcher.locale.languageCode).toLowerCase();
+    _lang = (saved ??
+            WidgetsBinding.instance.platformDispatcher.locale.languageCode)
+        .toLowerCase();
     // грузим prelogin/сетевые на старте (необязательно, но полезно)
     await ApiService.loadPreloginTranslations(lang: _lang);
     notifyListeners();
@@ -25,7 +27,9 @@ class Translations extends ChangeNotifier {
   Future<void> setLang(String lang) async {
     if (lang.toLowerCase() == _lang.toLowerCase()) return;
     _lang = lang.toLowerCase();
-    await ApiService.switchLanguage(_lang); // внутри обновит prelogin + сетевые
+
+    await ApiService.switchLanguage(_lang); // внутри сохранит и загрузит переводы
+
     _tick++; // сигнал для зависимых виджетов
     notifyListeners();
   }
@@ -35,7 +39,8 @@ class Translations extends ChangeNotifier {
 /// чтобы при его изменении все места, вызывающие t(), перестроились.
 String t(BuildContext context, String key) {
   // создаём зависимость на изменение .tick (ничего не делаем с числом)
-  final _ = context.dependOnInheritedWidgetOfExactType<_TranslationsTick>()?.tick;
+  final _ =
+      context.dependOnInheritedWidgetOfExactType<_TranslationsTick>()?.tick;
 
   return ApiService.getTranslationForWidget(context, key);
 }
@@ -54,8 +59,10 @@ class TranslationsScope extends StatelessWidget {
 
 class _TranslationsTick extends InheritedWidget {
   final int tick;
-  const _TranslationsTick({required this.tick, required super.child, super.key});
+  const _TranslationsTick(
+      {required this.tick, required super.child, super.key});
 
   @override
-  bool updateShouldNotify(_TranslationsTick oldWidget) => oldWidget.tick != tick;
+  bool updateShouldNotify(_TranslationsTick oldWidget) =>
+      oldWidget.tick != tick;
 }

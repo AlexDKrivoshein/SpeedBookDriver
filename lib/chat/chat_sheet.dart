@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'chat_controller.dart';
 import 'chat_message.dart';
-import '../api_service.dart' as api;
+import '../translations.dart';
 import '../fcm/messaging_service.dart';   // <<< добавлено
 
 class ChatSheet extends StatefulWidget {
@@ -19,9 +19,6 @@ class _ChatSheetState extends State<ChatSheet> {
   bool _inited = false;
 
   ChatController? _attachedChat;   // <<< чтобы корректно detech в dispose
-
-  String _t(BuildContext ctx, String key) =>
-      api.ApiService.getTranslationForWidget(ctx, key);
 
   @override
   void didChangeDependencies() {
@@ -99,14 +96,14 @@ class _ChatSheetState extends State<ChatSheet> {
             Row(
               children: [
                 Text(
-                  _t(context, 'chat.with'),
+                  t(context, 'chat.with'),
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(width: 6),
                 const Icon(Icons.person, size: 18),
                 const Spacer(),
                 IconButton(
-                  tooltip: _t(context, 'chat.refresh'),
+                  tooltip: t(context, 'chat.refresh'),
                   icon: const Icon(Icons.refresh),
                   onPressed: () async {
                     await chat.loadInitial();
@@ -141,7 +138,7 @@ class _ChatSheetState extends State<ChatSheet> {
                     minLines: 1,
                     maxLines: 4,
                     decoration: InputDecoration(
-                      hintText: _t(context, 'chat.placeholder'),
+                      hintText: t(context, 'chat.placeholder'),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(24),
                       ),

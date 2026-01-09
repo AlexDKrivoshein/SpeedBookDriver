@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'info_card.dart';
-import '../../../api_service.dart';
+import '../../../translations.dart';
 
 class ReferralCard extends StatelessWidget {
   final String? referalName;
@@ -20,8 +20,6 @@ class ReferralCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    String t(String k) => ApiService.getTranslationForWidget(context, k);
-
     if ((referalName ?? '').isNotEmpty) {
       return InfoCard(
         child: Row(
@@ -30,7 +28,7 @@ class ReferralCard extends StatelessWidget {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                '${t("home.referral.current_prefix")}: ${referalName!}',
+                '${t(context, "home.referral.current_prefix")}: ${referalName!}',
                 style: Theme.of(context).textTheme.titleMedium,
               ),
             ),
@@ -44,7 +42,7 @@ class ReferralCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(t('home.referral.title'),
+            Text(t(context, 'home.referral.title'),
                 style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
 
@@ -57,7 +55,7 @@ class ReferralCard extends StatelessWidget {
                     controller: controller,
                     keyboardType: TextInputType.number,
                     decoration: InputDecoration(
-                      labelText: t('home.referral.id_label'),
+                      labelText: t(context, 'home.referral.id_label'),
                       border: const OutlineInputBorder(),
                       prefixIcon: const Icon(Icons.tag),
                       // чтобы счётчик не увеличивал высоту карточки
@@ -79,7 +77,7 @@ class ReferralCard extends StatelessWidget {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                         : const Icon(Icons.link),
-                    label: Text(t('home.referral.attach')),
+                    label: Text(t(context, 'home.referral.attach')),
                   ),
                 ),
               ],

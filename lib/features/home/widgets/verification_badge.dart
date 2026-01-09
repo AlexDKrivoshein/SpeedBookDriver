@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../home_page.dart';
-import '../../../api_service.dart';
+import '../../../translations.dart';
 
 class VerificationBadge extends StatelessWidget {
   final DriverVerificationStatus status;
@@ -13,16 +13,16 @@ class VerificationBadge extends StatelessWidget {
 
     switch (status) {
       case DriverVerificationStatus.needVerification:
-        label = ApiService.getTranslationForWidget(context, 'home.verification.need');
+        label = t(context, 'home.verification.need');
         color = Colors.red; break;
       case DriverVerificationStatus.awaitingVerification:
-        label = ApiService.getTranslationForWidget(context, 'home.verification.pending');
+        label = t(context, 'home.verification.pending');
         color = Colors.amber; break;
       case DriverVerificationStatus.verified:
-        label = ApiService.getTranslationForWidget(context, 'home.verification.verified');
+        label = t(context, 'home.verification.verified');
         color = Colors.green; break;
       case DriverVerificationStatus.rejected:
-        label = ApiService.getTranslationForWidget(context, 'home.verification.rejected');
+        label = t(context, 'home.verification.rejected');
         color = Colors.red; break;
     }
 

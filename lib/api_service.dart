@@ -439,11 +439,9 @@ class ApiService {
   }
 
   static Future<void> switchLanguage(String lang) async {
+    _preloginLoaded = false;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('user_lang', lang.toLowerCase());
-
-    _preloginLoaded = false;
-
     await loadPreloginTranslations(lang: lang);
   }
 
@@ -472,4 +470,3 @@ class ApiService {
   static String asString(dynamic v) => v?.toString() ?? '';
 
 }
-

@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../api_service.dart';
+import '../translations.dart';
 import 'chat_controller.dart';
 import 'chat_sheet.dart';
 
@@ -37,7 +37,7 @@ class ChatButton extends StatelessWidget {
                   );
                 },
                 icon: const Icon(Icons.chat_bubble_outline),
-                label: Text(ApiService.getTranslationForWidget(context, 'chat.title')),
+                label: Text(t(context, 'chat.title')),
               ),
 
               // Бейдж непрочитанных

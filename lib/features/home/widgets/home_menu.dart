@@ -2,16 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../../api_service.dart';
 import '../../../brand.dart';
 import '../../../driver_api.dart'; // DriverDetails
-
-String t(BuildContext context, String key) =>
-    ApiService.getTranslationForWidget(context, key);
+import '../../../translations.dart';
 
 class HomeMenu extends StatelessWidget {
   const HomeMenu({
     super.key,
+    required this.rootContext,
     required this.details,
     required this.onInvite,
     required this.onOpenVerification,
@@ -25,6 +23,7 @@ class HomeMenu extends StatelessWidget {
     required this.onDeleteAccount,
   });
 
+  final BuildContext rootContext;
   final DriverDetails details;
   final VoidCallback onInvite;
   final VoidCallback onOpenVerification;
@@ -137,7 +136,7 @@ class HomeMenu extends StatelessWidget {
                   _tile(context, Icons.settings, t(context, 'menu.settings'), onOpenSettings),
 
                   _tile(context, Icons.language, t(context, 'menu.language'),
-                        () => onPickLanguage(context),
+                        () => onPickLanguage(rootContext),
                   ),
 
                   _tile(context, Icons.support_agent, t(context, 'menu.support'), onOpenSupport),
