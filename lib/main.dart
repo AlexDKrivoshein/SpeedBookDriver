@@ -542,8 +542,14 @@ class _RootState extends State<_Root> {
     const allowed = {'en', 'ru', 'km'};
     final lang = allowed.contains(sysLang) ? sysLang : 'en';
 
-    await prefs.setString('user_lang', lang);
-    await prefs.setString('user_country', 'KH');
+    final savedLang = (prefs.getString('user_lang') ?? '').toLowerCase();
+    if (savedLang.isEmpty) {
+      await prefs.setString('user_lang', lang);
+    }
+    final savedCountry = (prefs.getString('user_country') ?? '').toUpperCase();
+    if (savedCountry.isEmpty) {
+      await prefs.setString('user_country', 'KH');
+    }
 
     setState(() => _needOnboarding = false);
 

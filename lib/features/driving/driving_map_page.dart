@@ -701,7 +701,7 @@ class _DrivingMapPageState extends State<DrivingMapPage>
     await Future.delayed(const Duration(milliseconds: 10));
     if (!mounted || _disposed) return;
 
-    rootNav.pushNamedAndRemoveUntil('/', (route) => false);
+    rootNav.popUntil((route) => route.isFirst);
   }
 
   Future<void> _applyDriveDetails(Map<String, dynamic> data) async {
