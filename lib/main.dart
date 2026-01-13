@@ -43,7 +43,7 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 /// Управление Branch через флаг сборки (по умолчанию — off)
 const bool kBranchEnabled =
-bool.fromEnvironment('BRANCH_ENABLED', defaultValue: false);
+    bool.fromEnvironment('BRANCH_ENABLED', defaultValue: false);
 
 /// ===== Глобальные гарды роутинга (/drive) =====
 int? _lastRoutedDriveId;
@@ -82,7 +82,7 @@ final GlobalRouteObserver globalRouteObserver = GlobalRouteObserver();
 
 /// Канал уведомлений (общий, как и раньше — должен совпадать с нативным)
 const AndroidNotificationChannel kDefaultAndroidChannel =
-AndroidNotificationChannel(
+    AndroidNotificationChannel(
   'sbdriver_channel',
   'General notifications',
   description: 'SpeedBook push notifications',
@@ -129,7 +129,7 @@ Future<void> _initAppCheck() async {
 
   await FirebaseAppCheck.instance.activate(
     androidProvider:
-    isRelease ? AndroidProvider.playIntegrity : AndroidProvider.debug,
+        isRelease ? AndroidProvider.playIntegrity : AndroidProvider.debug,
     appleProvider: isRelease ? AppleProvider.deviceCheck : AppleProvider.debug,
   );
 
@@ -190,7 +190,7 @@ Future<void> _initNotifications() async {
   // Общий канал (как раньше)
   await _fln
       .resolvePlatformSpecificImplementation<
-      AndroidFlutterLocalNotificationsPlugin>()
+          AndroidFlutterLocalNotificationsPlugin>()
       ?.createNotificationChannel(kDefaultAndroidChannel);
 
   // Новый канал для офферов
@@ -263,7 +263,7 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
     final notif = message.notification;
     final title = notif?.title ?? 'New message';
-    final body  = notif?.body  ?? 'You have a new chat message';
+    final body = notif?.body ?? 'You have a new chat message';
 
     await _showLocalNotification(
       title: title,
@@ -310,7 +310,7 @@ Future<void> main() async {
 
       final notif = message.notification;
       final title = notif?.title ?? data['title'] ?? 'New message';
-      final body  = notif?.body  ?? data['body']  ?? 'You have a new chat message';
+      final body = notif?.body ?? data['body'] ?? 'You have a new chat message';
 
       await _showLocalNotification(
         title: title,
@@ -612,14 +612,23 @@ class _RootState extends State<_Root> {
 
         try {
           final prefs = await SharedPreferences.getInstance();
-          final savedLang =
-          (prefs.getString('user_lang') ?? '').toLowerCase();
+          final savedLang = (prefs.getString('user_lang') ?? '').toLowerCase();
+          final profileData = profile?['data'];
+          final profileLang = (profileData is Map<String, dynamic>
+                      ? profileData['user_lang']
+                      : null)
+                  ?.toString()
+                  .toLowerCase() ??
+              '';
+          final systemLang = WidgetsBinding
+              .instance.platformDispatcher.locale.languageCode
+              .toLowerCase();
           final userLang = savedLang.isNotEmpty
               ? savedLang
-              : (profile?['lang'] as String?)?.toLowerCase() ??
-              WidgetsBinding.instance.platformDispatcher.locale
-                  .languageCode
-                  .toLowerCase();
+              : (profileLang.isNotEmpty ? profileLang : systemLang);
+          debugPrint('[Main] Lang pick: saved="$savedLang" '
+              'profile="$profileLang" system="$systemLang" '
+              'chosen="$userLang"');
 
           if (mounted) {
             await context.read<Translations>().setLang(userLang);
@@ -633,12 +642,13 @@ class _RootState extends State<_Root> {
         }
       } else {
         final prefs = await SharedPreferences.getInstance();
-        final savedLang =
-        (prefs.getString('user_lang') ?? '').toLowerCase();
-        final guestLang = savedLang.isNotEmpty
-            ? savedLang
-            : WidgetsBinding.instance.platformDispatcher.locale.languageCode
+        final savedLang = (prefs.getString('user_lang') ?? '').toLowerCase();
+        final systemLang = WidgetsBinding
+            .instance.platformDispatcher.locale.languageCode
             .toLowerCase();
+        final guestLang = savedLang.isNotEmpty ? savedLang : systemLang;
+        debugPrint('[Main] Lang pick (guest): saved="$savedLang" '
+            'system="$systemLang" chosen="$guestLang"');
 
         if (mounted) {
           await context.read<Translations>().setLang(guestLang);
@@ -651,15 +661,12 @@ class _RootState extends State<_Root> {
     });
   }
 
-  String _extractMsg(Map<String, dynamic> map,
-      {String fallback = 'Error'}) {
+  String _extractMsg(Map<String, dynamic> map, {String fallback = 'Error'}) {
     String msg = (map['message']?.toString() ?? '').trim();
     if (msg.isEmpty) {
       final data = map['data'];
       if (data is Map<String, dynamic>) {
-        msg = (data['message']?.toString() ??
-            data['error']?.toString() ??
-            '')
+        msg = (data['message']?.toString() ?? data['error']?.toString() ?? '')
             .trim();
       }
     }
@@ -697,15 +704,13 @@ class _RootState extends State<_Root> {
   @override
   Widget build(BuildContext context) {
     if (_needOnboarding == null) {
-      return const Scaffold(
-          body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     if (_needOnboarding == true) {
       return OnboardingPage(onDone: _onOnboardingDone);
     }
     if (_checkingInit) {
-      return const Scaffold(
-          body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     if (!_isLoggedIn || !_hasSession) {

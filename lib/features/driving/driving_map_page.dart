@@ -63,6 +63,8 @@ class _DrivingMapPageState extends State<DrivingMapPage>
   bool _camMoveProgrammatic =
       false; // чтобы отличать наши анимации от жестов пользователя
   bool _canFinish = false;
+  String? _paymentType;
+  bool _paymentTypeAlertShown = false;
 
   // безопасный флаг демонтирования виджета
   bool _disposed = false;
@@ -709,6 +711,7 @@ class _DrivingMapPageState extends State<DrivingMapPage>
 
     final status = (data['status'] ?? '').toString().toUpperCase();
     final driveId = data['drive_id'];
+    final paymentType = data['payment_type']?.toString();
 
     _canArrived = ApiService.asBool(data['can_arrived']);
     _canStart = ApiService.asBool(data['can_start']);
@@ -717,6 +720,41 @@ class _DrivingMapPageState extends State<DrivingMapPage>
 
     if (driveId is int && _driveId != driveId) {
       _driveId = driveId;
+    }
+
+    if (paymentType != null && paymentType.isNotEmpty) {
+      if (_paymentType == null) {
+        _paymentType = paymentType;
+      } else if (_paymentType != paymentType && !_paymentTypeAlertShown) {
+        _paymentType = paymentType;
+        _paymentTypeAlertShown = true;
+        if (mounted && !_disposed) {
+          try {
+            await showDialog<void>(
+              context: context,
+              barrierDismissible: false,
+              builder: (ctx) => AlertDialog(
+                title: Text(t(context, 'drive.payment_type_changed_title')),
+                content: Text(
+                  t(context, 'drive.payment_type_changed_body')
+                      .replaceAll('{type}', paymentType),
+                  style: const TextStyle(fontSize: 18),
+                ),
+                actions: [
+                  FilledButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    child: Text(t(context, 'common.ok')),
+                  ),
+                ],
+              ),
+            );
+          } finally {
+            _paymentTypeAlertShown = false;
+          }
+        } else {
+          _paymentTypeAlertShown = false;
+        }
+      }
     }
 
     debugPrint('[Driving] status: $status');

@@ -440,9 +440,17 @@ class ApiService {
 
   static Future<void> switchLanguage(String lang) async {
     _preloginLoaded = false;
+    final normalized = lang.toLowerCase();
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('user_lang', lang.toLowerCase());
-    await loadPreloginTranslations(lang: lang);
+    await prefs.setString('user_lang', normalized);
+    if (isAuthenticated) {
+      try {
+        await callAndDecode('change_customer_language', {'language': normalized});
+      } catch (e) {
+        debugPrint('[ApiService] change_customer_language failed: $e');
+      }
+    }
+    await loadPreloginTranslations(lang: normalized);
   }
 
   /// Safe int parser: int | num | "123" -> int, иначе 0

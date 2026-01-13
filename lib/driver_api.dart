@@ -271,6 +271,23 @@ class DriverApi {
     return DriverDetails.fromJson(payload);
   }
 
+  /// Получить настройки водителя (JWT-полезная нагрузка)
+  static Future<Map<String, dynamic>> getDriverSettings() async {
+    debugPrint('[DriverApi] get_driver_settings');
+    final payload =
+        await ApiService.callAndDecode('get_driver_settings', const {});
+    return payload;
+  }
+
+  /// Сохранить настройки водителя
+  static Future<void> setDriverSettings({
+    required String payoutAccount,
+  }) async {
+    await ApiService.callAndDecode('set_driver_settings', {
+      'payout_account': payoutAccount,
+    });
+  }
+
   /// Установка реферала. Возвращает {status, message?}
   static Future<Map<String, dynamic>> setReferal(String referalId) async {
     final res =

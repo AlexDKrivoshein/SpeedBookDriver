@@ -26,6 +26,7 @@ import 'widgets/accounts_carousel.dart';
 import 'widgets/dots.dart';
 import 'widgets/home_menu.dart';
 import 'widgets/settings_sheet.dart';
+import 'widgets/driver_settings_sheet.dart';
 import 'widgets/transactions_section.dart';
 import '../driving/driving_map_page.dart';
 
@@ -49,6 +50,137 @@ DriverVerificationStatus _statusFromClass(String? driverClass) {
       return DriverVerificationStatus.rejected;
     default:
       return DriverVerificationStatus.awaitingVerification;
+  }
+}
+
+class _PayoutDialog extends StatefulWidget {
+  const _PayoutDialog({
+    required this.account,
+    required this.payoutAccount,
+    required this.onCreatePayout,
+  });
+
+  final DriverAccount account;
+  final String payoutAccount;
+  final Future<String?> Function(double amount) onCreatePayout;
+
+  @override
+  State<_PayoutDialog> createState() => _PayoutDialogState();
+}
+
+class _PayoutDialogState extends State<_PayoutDialog> {
+  late final TextEditingController _bankCtrl;
+  final TextEditingController _amountCtrl = TextEditingController();
+  String? _errorText;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _bankCtrl = TextEditingController(text: widget.payoutAccount);
+  }
+
+  @override
+  void dispose() {
+    _bankCtrl.dispose();
+    _amountCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_busy) return;
+    final rawAmount = _amountCtrl.text.trim().replaceAll(',', '.');
+    final amount = double.tryParse(rawAmount);
+    if (amount == null || amount <= 0) {
+      setState(() => _errorText = t(context, 'home.payout.error_amount'));
+      return;
+    }
+    if (amount > widget.account.balance) {
+      setState(() => _errorText = t(context, 'home.payout.error_exceeds'));
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (confirmCtx) => AlertDialog(
+        title: Text(t(context, 'home.payout.confirm_title')),
+        content: Text(t(context, 'home.payout.confirm_body')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(confirmCtx).pop(false),
+            child: Text(t(context, 'common.cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(confirmCtx).pop(true),
+            child: Text(t(context, 'home.payout.button')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    setState(() => _busy = true);
+    final err = await widget.onCreatePayout(amount);
+    if (!mounted) return;
+    if (err != null) {
+      setState(() {
+        _busy = false;
+        _errorText = err;
+      });
+      return;
+    }
+    Navigator.of(context).pop(true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(t(context, 'home.payout.title')),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _bankCtrl,
+              decoration: InputDecoration(
+                labelText: t(context, 'home.payout.bank_account'),
+              ),
+              readOnly: true,
+              textInputAction: TextInputAction.next,
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _amountCtrl,
+              decoration: InputDecoration(
+                labelText: t(context, 'home.payout.amount'),
+                helperText:
+                    '${t(context, 'home.payout.max')}: ${widget.account.balance} ${widget.account.currency}',
+              ),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+            ),
+            if (_errorText != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                _errorText!,
+                style: const TextStyle(color: Colors.red),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.of(context).pop(),
+          child: Text(t(context, 'common.cancel')),
+        ),
+        FilledButton(
+          onPressed: _busy ? null : _submit,
+          child: Text(t(context, 'home.payout.button')),
+        ),
+      ],
+    );
   }
 }
 
@@ -186,128 +318,35 @@ class _HomePageState extends State<HomePage> with RouteAware {
       return;
     }
 
-    final bankCtrl = TextEditingController();
-    final amountCtrl = TextEditingController();
-    String? errorText;
-    var busy = false;
-
+    String? payoutAccount;
     try {
-      await showDialog<void>(
-        context: context,
-        builder: (ctx) => StatefulBuilder(
-          builder: (ctx, setState) => AlertDialog(
-            title: Text(t(context, 'home.payout.title')),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: bankCtrl,
-                    decoration: InputDecoration(
-                      labelText: t(context, 'home.payout.bank_account'),
-                    ),
-                    textInputAction: TextInputAction.next,
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: amountCtrl,
-                    decoration: InputDecoration(
-                      labelText: t(context, 'home.payout.amount'),
-                      helperText:
-                          '${t(context, 'home.payout.max')}: ${account.balance} ${account.currency}',
-                    ),
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                  ),
-                  if (errorText != null) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      errorText!,
-                      style: const TextStyle(color: Colors.red),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: busy ? null : () => Navigator.of(ctx).pop(),
-                child: Text(t(context, 'common.cancel')),
-              ),
-              FilledButton(
-                onPressed: busy
-                    ? null
-                    : () async {
-                        final bankAccount = bankCtrl.text.trim();
-                        final rawAmount =
-                            amountCtrl.text.trim().replaceAll(',', '.');
-                        final amount = double.tryParse(rawAmount);
-                        if (bankAccount.isEmpty) {
-                          setState(() => errorText =
-                              t(context, 'home.payout.error_bank_account'));
-                          return;
-                        }
-                        if (amount == null || amount <= 0) {
-                          setState(() => errorText =
-                              t(context, 'home.payout.error_amount'));
-                          return;
-                        }
-                        if (amount > account.balance) {
-                          setState(() => errorText =
-                              t(context, 'home.payout.error_exceeds'));
-                          return;
-                        }
+      final settings = await DriverApi.getDriverSettings();
+      final data = settings['data'];
+      payoutAccount = (data is Map ? data['payout_account'] : null) ??
+          settings['payout_account'];
+    } catch (_) {}
 
-                        final confirmed = await showDialog<bool>(
-                          context: ctx,
-                          barrierDismissible: false,
-                          builder: (confirmCtx) => AlertDialog(
-                            title:
-                                Text(t(context, 'home.payout.confirm_title')),
-                            content:
-                                Text(t(context, 'home.payout.confirm_body')),
-                            actions: [
-                              TextButton(
-                                onPressed: () =>
-                                    Navigator.of(confirmCtx).pop(false),
-                                child: Text(t(context, 'common.cancel')),
-                              ),
-                              FilledButton(
-                                onPressed: () =>
-                                    Navigator.of(confirmCtx).pop(true),
-                                child: Text(t(context, 'home.payout.button')),
-                              ),
-                            ],
-                          ),
-                        );
-                        if (confirmed != true) return;
-
-                        setState(() => busy = true);
-                        final err = await _createPayout(
-                          account: account,
-                          bankAccount: bankAccount,
-                          amount: amount,
-                        );
-                        if (!mounted) return;
-                        if (err != null) {
-                          setState(() {
-                            busy = false;
-                            errorText = err;
-                          });
-                          return;
-                        }
-                        Navigator.of(ctx).pop();
-                        await _load();
-                      },
-                child: Text(t(context, 'home.payout.button')),
-              ),
-            ],
-          ),
-        ),
+    if (payoutAccount == null || payoutAccount.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(t(context, 'home.payout.missing_account'))),
       );
-    } finally {
-      bankCtrl.dispose();
-      amountCtrl.dispose();
+      return;
+    }
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => _PayoutDialog(
+        account: account,
+        payoutAccount: payoutAccount!,
+        onCreatePayout: (amount) => _createPayout(
+          account: account,
+          bankAccount: payoutAccount!.trim(),
+          amount: amount,
+        ),
+      ),
+    );
+    if (ok == true) {
+      await _load();
     }
   }
 
@@ -320,8 +359,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
       final res = await ApiService.callAndDecode(
         'create_aba_payout',
         {
-          'account': bankAccount,
-          'amout': amount,
+          'amount': amount,
           'my_account_id': account.id,
         },
       );
@@ -527,9 +565,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
             );
           },
           onOpenSettings: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(t(context, 'common.not_implemented'))),
-            );
+            DriverSettingsSheet.open(context);
           },
           onOpenSupport: () {
             ScaffoldMessenger.of(context).showSnackBar(
