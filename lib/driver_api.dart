@@ -271,7 +271,7 @@ class DriverApi {
     return DriverDetails.fromJson(payload);
   }
 
-  /// Получить настройки водителя (JWT-полезная нагрузка)
+  /// Получить настройки водителя (JWT-полезная нагрузка: payout_account, status)
   static Future<Map<String, dynamic>> getDriverSettings() async {
     debugPrint('[DriverApi] get_driver_settings');
     final payload =

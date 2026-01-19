@@ -3,7 +3,7 @@ import 'dart:io' show Platform;
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -32,6 +32,10 @@ class _DrivingMapPageState extends State<DrivingMapPage>
     with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   final Completer<GoogleMapController> _controller = Completer();
   StreamSubscription<Position>? _positionSub;
+  final ValueNotifier<Set<Marker>> _mapMarkers =
+      ValueNotifier<Set<Marker>>(<Marker>{});
+  final ValueNotifier<Set<Polyline>> _mapPolylines =
+      ValueNotifier<Set<Polyline>>(<Polyline>{});
 
   LatLng? _currentLatLng;
   double _heading = 0;
@@ -49,6 +53,7 @@ class _DrivingMapPageState extends State<DrivingMapPage>
   bool _pickupMode = false;
   int? _driveId;
   Marker? _driverMarker;
+  late final Widget _mapView;
 
   // ===== навигационный режим =====
   bool _navMode = false; // включаем в pickup
@@ -128,6 +133,21 @@ class _DrivingMapPageState extends State<DrivingMapPage>
       _radarCtrl.repeat();
     }
 
+    // Кешируем карту, чтобы не пересоздавать ее при частых rebuild.
+    _mapView = _DrivingMapView(
+      controller: _controller,
+      initialCamera: _initialCamera,
+      markers: _mapMarkers,
+      polylines: _mapPolylines,
+      liteModeEnabled: _preferLiteMode,
+      onMapCreated: (c) async {
+        if (_currentLatLng != null) {
+          await _maybeMoveCamera(_currentLatLng!, animated: false);
+        }
+      },
+      onCameraMoveStarted: _handleCameraMoveStarted,
+    );
+
     // всё, что требует контекста/MediaQuery — после первого кадра
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // иконка машины под текущий DPR
@@ -202,7 +222,8 @@ class _DrivingMapPageState extends State<DrivingMapPage>
     final px = (logicalWidth * dpr).round();
     final icon = await _bitmapFromAsset('assets/images/car.png', px);
     if (!mounted || _disposed) return;
-    setState(() => _carIcon = icon);
+    _carIcon = icon;
+    _refreshMapMarkers();
   }
 
   @override
@@ -214,6 +235,8 @@ class _DrivingMapPageState extends State<DrivingMapPage>
     _radarCtrl.dispose();
     _offerPolling = false;
     _stopDrivePolling();
+    _mapMarkers.dispose();
+    _mapPolylines.dispose();
     super.dispose();
   }
 
@@ -292,6 +315,7 @@ class _DrivingMapPageState extends State<DrivingMapPage>
     if (last != null) {
       _currentLatLng = LatLng(last.latitude, last.longitude);
       _heading = last.heading.isFinite ? last.heading : 0;
+      _refreshMapMarkers();
       if (mounted && !_disposed) setState(() {});
       await _tryStartDrivingOnce(last);
       if (!mounted || _disposed) return;
@@ -302,6 +326,7 @@ class _DrivingMapPageState extends State<DrivingMapPage>
       if (_disposed) return;
       _currentLatLng = LatLng(pos.latitude, pos.longitude);
       _heading = pos.heading.isFinite ? pos.heading : _heading;
+      _refreshMapMarkers();
       if (mounted && !_disposed) setState(() {});
       _maybeMoveCamera(_currentLatLng!);
       await _tryStartDrivingOnce(pos);
@@ -378,6 +403,8 @@ class _DrivingMapPageState extends State<DrivingMapPage>
         _offer = null;
         _polylines.clear();
         _offerMarkers.clear();
+        _refreshMapPolylines();
+        _refreshMapMarkers();
         _searching = true;
         _radarCtrl.repeat();
         if (!_offerPolling) _startOfferPolling();
@@ -566,6 +593,8 @@ class _DrivingMapPageState extends State<DrivingMapPage>
   }) async {
     _polylines.clear();
     _offerMarkers.clear();
+    _refreshMapPolylines();
+    _refreshMapMarkers();
 
     if (encoded == null || encoded.isEmpty) {
       if (mounted && !_disposed) setState(() {});
@@ -607,6 +636,7 @@ class _DrivingMapPageState extends State<DrivingMapPage>
       await _maybeMoveCamera(start, animated: true);
     }
 
+    _refreshMapMarkers();
     if (mounted && !_disposed) setState(() {});
   }
 
@@ -776,6 +806,8 @@ class _DrivingMapPageState extends State<DrivingMapPage>
       _offer = null;
       _polylines.clear();
       _offerMarkers.clear();
+      _refreshMapPolylines();
+      _refreshMapMarkers();
 
       _canArrived = false;
       _canStart = false;
@@ -829,11 +861,8 @@ class _DrivingMapPageState extends State<DrivingMapPage>
       if (rid > 0 && rid != _routeId && enc != null && enc.isNotEmpty) {
         final pts = decodePolyline(enc);
 
-        if (mounted && !_disposed) {
-          setState(() {
-            _polylines = {};
-          });
-        }
+        _polylines = {};
+        _refreshMapPolylines();
 
         _setRoutePolyline(pts);
         _routeId = rid;
@@ -999,6 +1028,8 @@ class _DrivingMapPageState extends State<DrivingMapPage>
         _offer = null;
         _polylines.clear();
         _offerMarkers.clear();
+        _refreshMapPolylines();
+        _refreshMapMarkers();
 
         if (mounted && !_disposed) {
           setState(() {
@@ -1037,6 +1068,7 @@ class _DrivingMapPageState extends State<DrivingMapPage>
       _followMe = true;
       _pickupMode = true;
     });
+    _refreshMapMarkers();
   }
 
   void _enterDriveMode() {
@@ -1051,6 +1083,7 @@ class _DrivingMapPageState extends State<DrivingMapPage>
       _followMe = true;
       _pickupMode = false;
     });
+    _refreshMapMarkers();
   }
 
   void _updateDriverMarker(LatLng p) async {
@@ -1066,11 +1099,8 @@ class _DrivingMapPageState extends State<DrivingMapPage>
       flat: true,
       icon: _carIcon ?? BitmapDescriptor.defaultMarker,
     );
-    if (mounted && !_disposed) {
-      setState(() {
-        _driverMarker = marker;
-      });
-    }
+    _driverMarker = marker;
+    _refreshMapMarkers();
 
     // в навигации — ведём камеру за машиной с поворотом по курсу
     if (_navMode && _followMe) {
@@ -1078,6 +1108,38 @@ class _DrivingMapPageState extends State<DrivingMapPage>
       await _moveNavCamera(p, bearing: br);
     }
     _lastDriverPos = p;
+  }
+
+  void _refreshMapMarkers() {
+    if (_disposed) return;
+    final markers = <Marker>{..._offerMarkers};
+    if (_driverMarker != null) {
+      markers.add(_driverMarker!);
+    } else if (_currentLatLng != null) {
+      markers.add(Marker(
+        markerId: const MarkerId('me'),
+        position: _currentLatLng!,
+        icon: _carIcon ?? BitmapDescriptor.defaultMarker,
+        rotation: _heading,
+        anchor: const Offset(0.5, 0.6),
+        flat: true,
+      ));
+    }
+    _mapMarkers.value = markers;
+  }
+
+  void _refreshMapPolylines() {
+    if (_disposed) return;
+    _mapPolylines.value = Set<Polyline>.from(_polylines);
+  }
+
+  void _handleCameraMoveStarted() {
+    if (_camMoveProgrammatic) {
+      _camMoveProgrammatic = false; // это мы сами двигали — игнорируем
+      return;
+    }
+    // Пользователь двинул карту: отключаем автоследование даже в наврежиме
+    if (_followMe) setState(() => _followMe = false);
   }
 
   void _setRoutePolyline(List<LatLng> points) {
@@ -1093,17 +1155,13 @@ class _DrivingMapPageState extends State<DrivingMapPage>
       jointType: JointType.round,
     );
 
-    if (mounted && !_disposed) {
-      setState(() {
-        _polylines = {};
-      });
-    }
+    _polylines = {};
+    _refreshMapPolylines();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _disposed) return;
-      setState(() {
-        _polylines = {poly};
-      });
+      _polylines = {poly};
+      _refreshMapPolylines();
     });
   }
 
@@ -1202,25 +1260,8 @@ class _DrivingMapPageState extends State<DrivingMapPage>
 
   @override
   Widget build(BuildContext context) {
-    // объединяем маркеры: машина + оффер
-    final Set<Marker> markers = {..._offerMarkers};
-
     final bool _showActionBar = _driveId != null &&
         (_canArrived || _canStart || _canFinish || _canCancel);
-
-    if (_driverMarker != null) {
-      markers.add(_driverMarker!); // приоритет — серверная позиция машины
-    } else if (_currentLatLng != null) {
-      // fallback: локальная позиция устройства (как было)
-      markers.add(Marker(
-        markerId: const MarkerId('me'),
-        position: _currentLatLng!,
-        icon: _carIcon ?? BitmapDescriptor.defaultMarker,
-        rotation: _heading,
-        anchor: const Offset(0.5, 0.6),
-        flat: true,
-      ));
-    }
 
     final theme = Theme.of(context);
 
@@ -1265,31 +1306,7 @@ class _DrivingMapPageState extends State<DrivingMapPage>
       ),
       body: Stack(
         children: [
-          GoogleMap(
-            initialCameraPosition: _initialCamera,
-            myLocationEnabled: false,
-            myLocationButtonEnabled: true,
-            markers: markers,
-            polylines: Set<Polyline>.from(_polylines),
-            compassEnabled: true,
-            zoomControlsEnabled: false,
-            liteModeEnabled: _preferLiteMode,
-            onMapCreated: (c) async {
-              _controller.complete(c);
-              if (_currentLatLng != null) {
-                await _maybeMoveCamera(_currentLatLng!, animated: false);
-              }
-            },
-            onCameraMoveStarted: () {
-              if (_camMoveProgrammatic) {
-                _camMoveProgrammatic =
-                    false; // это мы сами двигали — игнорируем
-                return;
-              }
-              // Пользователь двинул карту: отключаем автоследование даже в наврежиме
-              if (_followMe) setState(() => _followMe = false);
-            },
-          ),
+          _mapView,
 
           if (_searching && _offer == null)
             Positioned.fill(
@@ -1402,23 +1419,81 @@ class _DrivingMapPageState extends State<DrivingMapPage>
                 ),
               ),
             ),
+
+          Positioned(
+            right: 16,
+            bottom: 16 +
+                MediaQuery.of(context).padding.bottom +
+                (_showActionBar ? 96 : 0),
+            child: FloatingActionButton(
+              tooltip: 'Center',
+              onPressed: () async {
+                if (_currentLatLng != null) {
+                  if (!mounted || _disposed) return;
+                  setState(() => _followMe = true);
+                  if (_navMode) {
+                    await _moveNavCamera(_currentLatLng!);
+                  } else {
+                    await _maybeMoveCamera(_currentLatLng!, animated: true);
+                  }
+                }
+              },
+              child: const Icon(Icons.center_focus_strong),
+            ),
+          ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        tooltip: 'Center',
-        onPressed: () async {
-          if (_currentLatLng != null) {
-            if (!mounted || _disposed) return;
-            setState(() => _followMe = true);
-            if (_navMode) {
-              await _moveNavCamera(_currentLatLng!);
-            } else {
-              await _maybeMoveCamera(_currentLatLng!, animated: true);
-            }
-          }
-        },
-        child: const Icon(Icons.center_focus_strong),
-      ),
+    );
+  }
+}
+
+class _DrivingMapView extends StatelessWidget {
+  const _DrivingMapView({
+    required this.controller,
+    required this.initialCamera,
+    required this.markers,
+    required this.polylines,
+    required this.liteModeEnabled,
+    required this.onMapCreated,
+    required this.onCameraMoveStarted,
+  });
+
+  final Completer<GoogleMapController> controller;
+  final CameraPosition initialCamera;
+  final ValueListenable<Set<Marker>> markers;
+  final ValueListenable<Set<Polyline>> polylines;
+  final bool liteModeEnabled;
+  final Future<void> Function(GoogleMapController) onMapCreated;
+  final VoidCallback onCameraMoveStarted;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<Set<Marker>>(
+      valueListenable: markers,
+      builder: (context, mapMarkers, _) {
+        return ValueListenableBuilder<Set<Polyline>>(
+          valueListenable: polylines,
+          builder: (context, mapPolylines, __) {
+            return GoogleMap(
+              initialCameraPosition: initialCamera,
+              myLocationEnabled: false,
+              myLocationButtonEnabled: true,
+              markers: mapMarkers,
+              polylines: mapPolylines,
+              compassEnabled: true,
+              zoomControlsEnabled: false,
+              liteModeEnabled: liteModeEnabled,
+              onMapCreated: (c) async {
+                if (!controller.isCompleted) {
+                  controller.complete(c);
+                }
+                await onMapCreated(c);
+              },
+              onCameraMoveStarted: onCameraMoveStarted,
+            );
+          },
+        );
+      },
     );
   }
 }

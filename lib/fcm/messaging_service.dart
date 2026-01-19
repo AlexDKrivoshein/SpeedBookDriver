@@ -154,7 +154,6 @@ class MessagingService {
           importance: Importance.max,
           priority: Priority.max,
           category: AndroidNotificationCategory.call,
-          fullScreenIntent: true,
           ongoing: true,     // пока не ответили/не отклонили
           autoCancel: false,
           playSound: true,

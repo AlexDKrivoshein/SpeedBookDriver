@@ -443,6 +443,7 @@ class MyApp extends StatelessWidget {
               theme: ThemeData(
                 useMaterial3: true,
                 colorSchemeSeed: Colors.blue,
+                fontFamily: i18n.lang == 'km' ? 'NotoSansKhmer' : null,
               ),
               locale: Locale(i18n.lang),
               supportedLocales: const [

@@ -53,9 +53,12 @@ class BrandHeader extends StatelessWidget implements PreferredSizeWidget {
                       onTap: onBackTap ?? () => Navigator.maybePop(context),
                     )
                   else if (onMenuTap != null)
-                    _circleBtn(
-                      icon: Icons.menu,
-                      onTap: onMenuTap!,
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: _iconBtn(
+                        icon: Icons.menu,
+                        onTap: onMenuTap!,
+                      ),
                     )
                   else
                     const SizedBox(width: 44, height: 44),
@@ -86,6 +89,23 @@ class BrandHeader extends StatelessWidget implements PreferredSizeWidget {
           child: Center(
             child: Icon(icon, color: Colors.black87, size: 22),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _iconBtn({required IconData icon, required VoidCallback onTap}) {
+    return SizedBox(
+      width: 44,
+      height: 44,
+      child: IconButton(
+        onPressed: onTap,
+        splashRadius: 22,
+        icon: Icon(
+          icon,
+          color: Colors.black,
+          size: 26,
+          weight: 700,
         ),
       ),
     );
