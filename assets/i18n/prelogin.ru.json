@@ -96,6 +96,10 @@
   "home.vehicle.docs.add": "Добавить документ",
   "home.vehicle.docs.take": "Сделать фото документа",
   "home.vehicle.docs.required": "Пожалуйста, приложите фото хотя бы одного документа",
+  "home.vehicle.photos": "Фото автомобиля (4)",
+  "home.vehicle.photos.add": "Добавить фото",
+  "home.vehicle.photos.take": "Сделать фото",
+  "home.vehicle.photos.required": "Пожалуйста, загрузите 4 фото автомобиля",
 
   "home.transactions.title": "Последние транзакции",
   "home.transactions.empty": "Пока нет транзакций",
@@ -129,7 +133,7 @@
 
   "verification.step.data.title": "Личные данные",
 
-  "verification.step.passport.title": "Фото паспорта",
+  "verification.step.passport.title": "Фото паспорта или ID-карты",
   "verification.step.passport.hint": "Документ должен быть оригиналом, действительным и не просроченным.",
 
   "verification.step.license.title": "Водительское удостоверение",

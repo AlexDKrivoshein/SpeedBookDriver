@@ -320,16 +320,14 @@ class _HomePageState extends State<HomePage> with RouteAware {
 
     String? payoutAccount;
     try {
-      final settings = await DriverApi.getDriverSettings();
+      final settings = await DriverApi.getDriverSettings(onlyConfirmed: true);
       final data = settings['data'];
       payoutAccount = (data is Map ? data['payout_account'] : null) ??
           settings['payout_account'];
     } catch (_) {}
 
     if (payoutAccount == null || payoutAccount.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(t(context, 'home.payout.missing_account'))),
-      );
+      await DriverSettingsSheet.open(context);
       return;
     }
 

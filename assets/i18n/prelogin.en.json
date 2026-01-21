@@ -97,6 +97,10 @@
   "home.vehicle.docs.add": "Add document",
   "home.vehicle.docs.take": "Take photo of document",
   "home.vehicle.docs.required": "Please upload a vehicle document photo",
+  "home.vehicle.photos": "Vehicle photos (4)",
+  "home.vehicle.photos.add": "Add photo",
+  "home.vehicle.photos.take": "Take photo",
+  "home.vehicle.photos.required": "Please upload 4 vehicle photos",
 
   "home.transactions.title": "Recent transactions",
   "home.transactions.empty": "No transactions yet",
@@ -130,7 +134,7 @@
 
   "verification.step.data.title": "Personal data",
 
-  "verification.step.passport.title": "Passport photo",
+  "verification.step.passport.title": "Passport or ID Card Photo",
   "verification.step.passport.hint": "The document must be original, valid, not expired.",
 
   "verification.step.license.title": "Driver license",

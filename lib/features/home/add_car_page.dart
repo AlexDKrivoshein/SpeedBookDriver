@@ -46,6 +46,7 @@ class _AddCarPageState extends State<AddCarPage> {
   // single required document
   final ImagePicker _picker = ImagePicker();
   Uint8List? _carDocFile;
+  final List<Uint8List> _carPhotos = [];
 
   @override
   void initState() {
@@ -140,15 +141,18 @@ class _AddCarPageState extends State<AddCarPage> {
   }
 
   bool get _docValid => _carDocFile != null;
+  bool get _photosValid => _carPhotos.length == 4;
 
   // ----- submit -----
   Future<void> _submit() async {
     setState(() => _submittedOnce = true);
 
     final valid = _formKey.currentState?.validate() ?? false;
-    if (!valid || !_docValid) {
+    if (!valid || !_docValid || !_photosValid) {
       final msg = !_docValid
           ? t(context, 'home.vehicle.docs.required')
+          : !_photosValid
+          ? t(context, 'home.vehicle.photos.required')
           : t(context, 'common.fill_all_required');
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
       return;
@@ -164,6 +168,7 @@ class _AddCarPageState extends State<AddCarPage> {
         number: _numberCtrl.text.trim(),
         year: _selYear!,
         carDocFile: _carDocFile!,
+        carPhotos: _carPhotos,
       ).timeout(const Duration(seconds: 30));
 
       final status = (res['status'] ?? '').toString().toUpperCase();
@@ -235,6 +240,61 @@ class _AddCarPageState extends State<AddCarPage> {
   void _removeDoc() {
     _carDocFile = null;
     setState(() {});
+  }
+
+  Future<void> _pickVehiclePhotoFromGallery() async {
+    if (_carPhotos.length >= 4) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(t(context, 'home.vehicle.photos.required'))),
+      );
+      return;
+    }
+    try {
+      final x = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+        maxWidth: 2560,
+      );
+      if (x == null) return;
+      final bytes = await x.readAsBytes();
+      if (!mounted) return;
+      setState(() => _carPhotos.add(bytes));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('${t(context, "common.error")}: $e')));
+      }
+    }
+  }
+
+  Future<void> _takeVehiclePhoto() async {
+    if (_carPhotos.length >= 4) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(t(context, 'home.vehicle.photos.required'))),
+      );
+      return;
+    }
+    try {
+      final x = await _picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 85,
+        maxWidth: 2560,
+      );
+      if (x == null) return;
+      final bytes = await x.readAsBytes();
+      if (!mounted) return;
+      setState(() => _carPhotos.add(bytes));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('${t(context, "common.error")}: $e')));
+      }
+    }
+  }
+
+  void _removeVehiclePhoto(int index) {
+    if (index < 0 || index >= _carPhotos.length) return;
+    setState(() => _carPhotos.removeAt(index));
   }
 
   // ----- UI -----
@@ -449,6 +509,102 @@ class _AddCarPageState extends State<AddCarPage> {
                     Text(
                       t(context, 'home.vehicle.docs.required'),
                       style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // vehicle photos (required)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _labelRich('home.vehicle.photos', required: true),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _pickVehiclePhotoFromGallery,
+                          icon: const Icon(Icons.photo_library_outlined),
+                          label: Text(t(context, 'home.vehicle.photos.add')),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _takeVehiclePhoto,
+                          icon: const Icon(Icons.photo_camera_outlined),
+                          label: Text(t(context, 'home.vehicle.photos.take')),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (int i = 0; i < _carPhotos.length; i++)
+                        Stack(
+                          alignment: Alignment.topRight,
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.memory(
+                                _carPhotos[i],
+                                width: 92,
+                                height: 92,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                            Material(
+                              color: Colors.transparent,
+                              child: IconButton(
+                                onPressed: () => _removeVehiclePhoto(i),
+                                icon: const Icon(Icons.close),
+                                tooltip: t(context, 'common.remove'),
+                                style: ButtonStyle(
+                                  backgroundColor:
+                                      WidgetStateProperty.all(Colors.black45),
+                                  foregroundColor:
+                                      WidgetStateProperty.all(Colors.white),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      for (int i = _carPhotos.length; i < 4; i++)
+                        Container(
+                          width: 92,
+                          height: 92,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: theme.dividerColor),
+                            color: theme.colorScheme.surfaceVariant,
+                          ),
+                          child: Icon(Icons.photo, color: theme.hintColor),
+                        ),
+                    ],
+                  ),
+                  if (_submittedOnce && !_photosValid)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        t(context, 'home.vehicle.photos.required'),
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                          fontSize: 12,
+                        ),
+                      ),
+                    )
+                  else if (!_photosValid)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        t(context, 'home.vehicle.photos.required'),
+                        style:
+                            theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
+                      ),
                     ),
                 ],
               ),

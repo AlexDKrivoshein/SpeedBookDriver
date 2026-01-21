@@ -97,6 +97,10 @@
   "home.vehicle.docs.add": "បន្ថែមឯកសារ",
   "home.vehicle.docs.take": "ថតរូបឯកសាររថយន្ត",
   "home.vehicle.docs.required": "សូមផ្ទុករូបថតឯកសាររថយន្ត",
+  "home.vehicle.photos": "រូបថតយានយន្ត (4)",
+  "home.vehicle.photos.add": "បន្ថែមរូបថត",
+  "home.vehicle.photos.take": "ថតរូប",
+  "home.vehicle.photos.required": "សូមផ្ទុករូបថតយានយន្ត 4 សន្លឹក",
 
   "home.transactions.title": "ប្រតិបត្តិការចុងក្រោយ",
   "home.transactions.empty": "មិនទាន់មានប្រតិបត្តិការទេ",
@@ -130,7 +134,7 @@
 
   "verification.step.data.title": "ទិន្នន័យផ្ទាល់ខ្លួន",
 
-  "verification.step.passport.title": "រូបថតលិខិតឆ្លងដែន",
+  "verification.step.passport.title": "រូបថតលិខិតឆ្លងដែន ឬ ប័ណ្ណអត្តសញ្ញាណ",
   "verification.step.passport.hint": "ឯកសារត្រូវតែជាដើម មានសុពលភាព និងមិនផុតកំណត់។",
 
   "verification.step.license.title": "បណ្ណបើកបរ",

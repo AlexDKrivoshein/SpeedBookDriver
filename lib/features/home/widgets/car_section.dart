@@ -83,46 +83,19 @@ class CarSection extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    // Кнопки Add car / Book rental
+    // Кнопки Add car
     List<Widget> _buildTopButtons() {
-      void fallbackRental() {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Not implemented yet')),
-        );
-      }
-      final bookRental = onBookRental ?? fallbackRental;
-
       if (cls == 'AWAITING') {
+        return const [];
+      } else {
         return [
           SizedBox(
             width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: bookRental,
-              icon: const Icon(Icons.directions_car),
-              label: Text(t('home.car.book_rental')),
+            child: FilledButton.icon(
+              onPressed: onAddCar,
+              icon: const Icon(Icons.add),
+              label: Text(t('home.car.add')),
             ),
-          ),
-        ];
-      } else {
-        return [
-          Row(
-            children: [
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: onAddCar,
-                  icon: const Icon(Icons.add),
-                  label: Text(t('home.car.add')),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: bookRental,
-                  icon: const Icon(Icons.directions_car),
-                  label: Text(t('home.car.book_rental')),
-                ),
-              ),
-            ],
           ),
         ];
       }
