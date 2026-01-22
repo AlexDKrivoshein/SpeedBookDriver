@@ -101,6 +101,8 @@
   "home.vehicle.photos.add": "បន្ថែមរូបថត",
   "home.vehicle.photos.take": "ថតរូប",
   "home.vehicle.photos.required": "សូមផ្ទុករូបថតយានយន្ត 4 សន្លឹក",
+  "home.vehicle.inspection": "ការពិនិត្យយានយន្ត",
+  "home.vehicle.inspection.hint": "បន្ថែមរូបថតពិនិត្យយានយន្ត (ជាជម្រើស)",
 
   "home.transactions.title": "ប្រតិបត្តិការចុងក្រោយ",
   "home.transactions.empty": "មិនទាន់មានប្រតិបត្តិការទេ",
@@ -138,16 +140,24 @@
   "verification.step.passport.hint": "ឯកសារត្រូវតែជាដើម មានសុពលភាព និងមិនផុតកំណត់។",
 
   "verification.step.license.title": "បណ្ណបើកបរ",
+  "verification.step.commercial.title": "បណ្ណបើកបរពាណិជ្ជកម្ម",
+  "verification.step.license2.title": "បណ្ណបើកបរ (2)",
   "verification.step.license.hint": "ឯកសារត្រូវតែជាដើម មានសុពលភាព និងមិនផុតកំណត់។",
 
   "verification.step.selfie.title": "សែលហ្វីជាមួយលិខិតឆ្លងដែន",
   "verification.step.selfie.subtitle": "សូមធានាថាមុខរបស់អ្នកមើលឃើញច្បាស់",
   "verification.step.selfie.hint": "មិនពាក់មួក មិនពាក់វ៉ែនតា ហើយលិខិតឆ្លងដែនត្រូវអាចអានបាន។",
+  "verification.step.selfie_app.title": "សែលហ្វីសម្រាប់អតិថិជន",
+  "verification.step.selfie_app.subtitle": "ថតសែលហ្វីសម្រាប់ប្រវត្តិរូប",
+  "verification.step.selfie_app.hint": "មុខនៅកណ្តាល មានពន្លឺល្អ។",
 
   "verification.doc.hint.valid": "ឯកសារត្រូវតែជាដើម និងមានសុពលភាព",
   "verification.photo.empty": "មិនទាន់មានរូបថត",
   "verification.photo.take": "ថតរូប",
+  "verification.photo.gallery": "ជ្រើសពីវិចិត្រសាល",
   "verification.photo.retake": "ថតម្ដងទៀត",
+  "common.remove": "លុប",
+  "common.required": "ចាំបាច់",
 
   "home.referral.invite_btn": "អញ្ជើញតាមតំណភ្ជាប់",
 

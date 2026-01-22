@@ -419,7 +419,9 @@ class DriverApi {
     required String number,
     required int year,
     required Uint8List carDocFile, // один обязательный файл
-    required List<Uint8List> carPhotos, // 4 фото автомобиля
+    required List<Uint8List> carPhotos, // минимум 4 фото автомобиля
+    Uint8List? vehicleInspectionFile,
+    void Function(int done, int total)? onProgress,
   }) async {
     String b64(Uint8List f) => base64Encode(f);
 
@@ -430,15 +432,45 @@ class DriverApi {
       'color_hex': colorHex,
       'number': number,
       'year': year,
-      'docs': {
-        'car_doc': b64(carDocFile),
-        'car_photos': carPhotos.map(b64).toList(),
-      },
     };
 
-    final res =
-        await ApiService.callAndDecode('submit_car_verification', payload)
-            .timeout(const Duration(seconds: 30));
+    final images = <Map<String, Object>>[
+      {'type': 'VEHICLE_IMAGE', 'file': carDocFile},
+      for (int i = 0; i < carPhotos.length; i++)
+        {'type': 'CAR${i + 1}_IMAGE', 'file': carPhotos[i]},
+      if (vehicleInspectionFile != null)
+        {'type': 'VEHICLE_INSPECTION_IMAGE', 'file': vehicleInspectionFile},
+    ];
+    final totalSteps = images.length + 1;
+    onProgress?.call(0, totalSteps);
+
+    final res = await ApiService.callAndDecode(
+      'submit_car_verification',
+      payload,
+    ).timeout(const Duration(seconds: 30));
+
+    final status = (res['status'] ?? '').toString().toUpperCase();
+    if (status != 'OK') {
+      return (res is Map<String, dynamic>)
+          ? res
+          : <String, dynamic>{'status': 'ERROR'};
+    }
+
+    onProgress?.call(1, totalSteps);
+
+    for (var i = 0; i < images.length; i++) {
+      final item = images[i];
+      final type = item['type'] as String;
+      final file = item['file'] as Uint8List;
+      await ApiService
+          .callAndDecode('add_car_verification_image', {
+        'type': type,
+        'base64': b64(file),
+      }, timeoutSeconds: 300)
+          .timeout(const Duration(seconds: 300));
+      onProgress?.call(i + 2, totalSteps);
+    }
+
     return (res is Map<String, dynamic>)
         ? res
         : <String, dynamic>{'status': 'ERROR'};

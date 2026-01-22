@@ -192,6 +192,7 @@ class ApiService {
       String apiName,
       Map<String, dynamic> body, {
         bool validateOnline = false,
+        int timeoutSeconds = _timeoutSeconds,
       }) async {
     final prefs = await SharedPreferences.getInstance();
     final token  = await _ensureValidToken(validateOnline: validateOnline);
@@ -221,7 +222,7 @@ class ApiService {
           },
           body: jsonEncode({'jwt': jwt}),
         )
-            .timeout(Duration(seconds: _timeoutSeconds));
+            .timeout(Duration(seconds: timeoutSeconds));
 
         if (response.statusCode == 200) break;
 
@@ -250,6 +251,7 @@ class ApiService {
       String apiName,
       Map<String, dynamic> body, {
         bool validateOnline = false,
+        int timeoutSeconds = _timeoutSeconds,
       }) async {
     final token  = await _ensureValidToken(validateOnline: validateOnline);
 
@@ -272,7 +274,7 @@ class ApiService {
           },
           body: jsonEncode(body),
         )
-            .timeout(Duration(seconds: _timeoutSeconds));
+            .timeout(Duration(seconds: timeoutSeconds));
 
         if (resp.statusCode == 200) break;
 
@@ -307,9 +309,15 @@ class ApiService {
       Map<String, dynamic> body, {
         Future<http.Response> Function(String apiName, Map<String, dynamic> body)? caller,
         bool validateOnline = false,
+        int timeoutSeconds = _timeoutSeconds,
       }) async {
     final response = await (caller ??
-        ((name, data) => call(name, data, validateOnline: validateOnline)))(apiName, body);
+        ((name, data) => call(
+              name,
+              data,
+              validateOnline: validateOnline,
+              timeoutSeconds: timeoutSeconds,
+            )))(apiName, body);
 
     if (response.statusCode != 200) {
       throw StateError('HTTP ${response.statusCode}');

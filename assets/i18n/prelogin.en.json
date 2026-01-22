@@ -101,6 +101,8 @@
   "home.vehicle.photos.add": "Add photo",
   "home.vehicle.photos.take": "Take photo",
   "home.vehicle.photos.required": "Please upload 4 vehicle photos",
+  "home.vehicle.inspection": "Vehicle inspection",
+  "home.vehicle.inspection.hint": "Add a vehicle inspection photo (optional)",
 
   "home.transactions.title": "Recent transactions",
   "home.transactions.empty": "No transactions yet",
@@ -138,16 +140,24 @@
   "verification.step.passport.hint": "The document must be original, valid, not expired.",
 
   "verification.step.license.title": "Driver license",
+  "verification.step.commercial.title": "Commercial driver license",
+  "verification.step.license2.title": "Driver license (2)",
   "verification.step.license.hint": "The document must be original, valid, not expired.",
 
   "verification.step.selfie.title": "Selfie with passport",
   "verification.step.selfie.subtitle": "Make sure your face is clearly visible",
   "verification.step.selfie.hint": "No hats, no glasses, passport must be readable.",
+  "verification.step.selfie_app.title": "Selfie for customers",
+  "verification.step.selfie_app.subtitle": "Take a selfie for your profile",
+  "verification.step.selfie_app.hint": "Face centered, good lighting.",
 
   "verification.doc.hint.valid": "Documents must be original and valid",
   "verification.photo.empty": "No photo yet",
   "verification.photo.take": "Take photo",
+  "verification.photo.gallery": "Choose from gallery",
   "verification.photo.retake": "Retake",
+  "common.remove": "Remove",
+  "common.required": "Required",
 
   "home.referral.invite_btn": "Invite via link",
   "referral.title": "Invite a friend",

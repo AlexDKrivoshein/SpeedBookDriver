@@ -100,6 +100,8 @@
   "home.vehicle.photos.add": "Добавить фото",
   "home.vehicle.photos.take": "Сделать фото",
   "home.vehicle.photos.required": "Пожалуйста, загрузите 4 фото автомобиля",
+  "home.vehicle.inspection": "Осмотр автомобиля",
+  "home.vehicle.inspection.hint": "Добавьте фото осмотра автомобиля (необязательно)",
 
   "home.transactions.title": "Последние транзакции",
   "home.transactions.empty": "Пока нет транзакций",
@@ -137,16 +139,24 @@
   "verification.step.passport.hint": "Документ должен быть оригиналом, действительным и не просроченным.",
 
   "verification.step.license.title": "Водительское удостоверение",
+  "verification.step.commercial.title": "Коммерческое водительское удостоверение",
+  "verification.step.license2.title": "Водительское удостоверение (2)",
   "verification.step.license.hint": "Документ должен быть оригиналом, действительным и не просроченным.",
 
   "verification.step.selfie.title": "Селфи с паспортом",
   "verification.step.selfie.subtitle": "Убедитесь, что ваше лицо видно чётко",
   "verification.step.selfie.hint": "Без головных уборов и очков, паспорт должен быть читаемым.",
+  "verification.step.selfie_app.title": "Селфи для клиентов",
+  "verification.step.selfie_app.subtitle": "Сделайте селфи для профиля",
+  "verification.step.selfie_app.hint": "Лицо по центру кадра, хорошее освещение.",
 
   "verification.doc.hint.valid": "Документы должны быть оригинальными и действительными",
   "verification.photo.empty": "Фото пока нет",
   "verification.photo.take": "Сделать фото",
+  "verification.photo.gallery": "Выбрать из галереи",
   "verification.photo.retake": "Переснять",
+  "common.remove": "Удалить",
+  "common.required": "Обязательное поле",
 
   "home.referral.invite_btn": "Пригласить по ссылке",
   "referral.title": "Пригласить друга",
