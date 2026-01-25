@@ -5,6 +5,7 @@ import '../call/agora_controller.dart';
 import '../call/call_payload.dart';
 import '../call/incoming_call_page.dart';
 import '../call/permissions.dart';  // <-- добавили общий хелпер
+import '../brand.dart';
 
 /// Кнопка "Позвонить" рядом с чатом
 class CallButton extends StatefulWidget {
@@ -150,12 +151,16 @@ class _CallButtonState extends State<CallButton> {
 
   @override
   Widget build(BuildContext context) {
+    final splash = Brand.yellow.withOpacity(0.2);
     return Material(
-      color: Colors.white,
+      color: Brand.yellowDark,
       shape: const CircleBorder(),
       elevation: widget.elevation,
       child: InkWell(
         customBorder: const CircleBorder(),
+        splashColor: splash,
+        highlightColor: splash,
+        hoverColor: splash,
         onTap: _loading ? null : _startCall,
         child: Padding(
           padding: widget.padding,
@@ -163,9 +168,12 @@ class _CallButtonState extends State<CallButton> {
               ? const SizedBox(
             width: 24,
             height: 24,
-            child: CircularProgressIndicator(strokeWidth: 2),
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation<Color>(Brand.textDark),
+            ),
           )
-              : const Icon(Icons.phone, color: Colors.green, size: 24),
+              : const Icon(Icons.phone, color: Brand.textDark, size: 24),
         ),
       ),
     );

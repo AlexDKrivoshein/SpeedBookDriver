@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../brand.dart';
 import 'chat_controller.dart';
 import 'chat_sheet.dart';
 
@@ -74,6 +75,7 @@ class _ChatDockState extends State<ChatDock> {
       child: Consumer<ChatController>(
         builder: (_, c, __) {
           final unread = c.unreadCount;
+          final splash = Brand.yellow.withOpacity(0.2);
 
           // Фиксированный контейнер под FAB (Material FAB по умолчанию 56x56)
           return SizedBox(
@@ -89,6 +91,10 @@ class _ChatDockState extends State<ChatDock> {
                     child: FloatingActionButton(
                       heroTag: 'chat_fab_${widget.driveId}',
                       tooltip: 'Chat',
+                      backgroundColor: Brand.yellowDark,
+                      foregroundColor: Brand.textDark,
+                      splashColor: splash,
+                      hoverColor: splash,
                       onPressed: _openChat,
                       child: const Icon(Icons.chat_bubble_outline),
                     ),

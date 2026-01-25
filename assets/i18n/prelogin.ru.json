@@ -211,15 +211,19 @@
 
   "driving.canceled": "Поездка отменена",
   "driving.arrived": "Прибыл",
-  "driving.arrived_done": "Отметка о прибытии сохранена",
   "driving.start": "Старт",
-  "driving.started": "Поездка начата",
   "driving.cancel_drive": "Отменить поездку",
 
   "driving.finish": "Завершить",
   "driving.finish_confirm_title": "Завершить поездку?",
   "driving.finish_confirm_body": "Вы уверены, что хотите завершить поездку?",
-  "driving.finished": "Поездка завершена",
+  "driving.summary_title": "Итоги поездки",
+  "driving.summary_cost": "Стоимость",
+  "driving.summary_payment_type": "Тип оплаты",
+  "driving.summary_overprice": "Переплата",
+  "driving.summary_distance": "Расстояние",
+  "driving.summary_duration": "Длительность",
+  "driving.summary_close": "Закрыть",
 
   "chat.title": "Чат",
   "chat.with": "Чат с водителем",

@@ -230,11 +230,18 @@ class ApiService {
           await Future.delayed(_retryDelay(attempt));
           continue;
         }
+        final trimmedBody = response.body.trim();
+        if (trimmedBody.isNotEmpty) {
+          debugPrint('[ApiService] HTTP ${response.statusCode} body: $trimmedBody');
+        }
         throw StateError('HTTP ${response.statusCode}');
       } on TimeoutException catch (_) {
         if (attempt == _maxAttempts - 1) rethrow;
         await Future.delayed(_retryDelay(attempt));
       } on SocketException catch (_) {
+        if (attempt == _maxAttempts - 1) rethrow;
+        await Future.delayed(_retryDelay(attempt));
+      } on http.ClientException catch (_) {
         if (attempt == _maxAttempts - 1) rethrow;
         await Future.delayed(_retryDelay(attempt));
       }
@@ -287,6 +294,9 @@ class ApiService {
         if (attempt == _maxAttempts - 1) rethrow;
         await Future.delayed(_retryDelay(attempt));
       } on SocketException catch (_) {
+        if (attempt == _maxAttempts - 1) rethrow;
+        await Future.delayed(_retryDelay(attempt));
+      } on http.ClientException catch (_) {
         if (attempt == _maxAttempts - 1) rethrow;
         await Future.delayed(_retryDelay(attempt));
       }

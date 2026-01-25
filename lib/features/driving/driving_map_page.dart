@@ -15,6 +15,7 @@ import '../../driver_api.dart';
 import '../../api_service.dart';
 import '../../translations.dart';
 import '../../chat/chat_dock.dart';
+import '../../brand.dart';
 import 'ui/pickup_action_bar.dart';
 import 'ui/offer_sheet.dart';
 import 'map/route_utils.dart';
@@ -146,6 +147,7 @@ class _DrivingMapPageState extends State<DrivingMapPage>
         }
       },
       onCameraMoveStarted: _handleCameraMoveStarted,
+      onCameraMove: _handleCameraMove,
     );
 
     // всё, что требует контекста/MediaQuery — после первого кадра
@@ -179,6 +181,7 @@ class _DrivingMapPageState extends State<DrivingMapPage>
         final distanceLabel = (o['distance_label'] ?? '').toString();
         final durationLabel = _formatDuration(o['duration']);
         final priceLabel = (o['price_label'] ?? '').toString();
+        final paymentTypeLabel = (o['payment_type'] ?? '').toString();
         final offerValid = o['offer_valid'] is int
             ? o['offer_valid'] as int
             : int.tryParse(o['offer_valid']?.toString() ?? '');
@@ -192,6 +195,7 @@ class _DrivingMapPageState extends State<DrivingMapPage>
           distanceLabel: distanceLabel,
           durationLabel: durationLabel,
           priceLabel: priceLabel,
+          paymentTypeLabel: paymentTypeLabel,
           onAccept: _onAccept,
           onDecline: _onDecline,
           t: (k) => t(context, k),
@@ -257,6 +261,10 @@ class _DrivingMapPageState extends State<DrivingMapPage>
     Navigator.of(context).maybePop();
   }
 
+  bool _isOk(Map<String, dynamic> reply) {
+    return (reply['status'] ?? '').toString() == 'OK';
+  }
+
   Future<bool> _startDrivingSafeFromLastPos() async {
     final last = LocationService.I.lastKnownPosition;
     if (last == null) {
@@ -279,7 +287,7 @@ class _DrivingMapPageState extends State<DrivingMapPage>
 
       debugPrint('[Driving] start_driving reply: $reply');
 
-      final ok = (reply['status'] ?? '').toString() == 'OK';
+      final ok = _isOk(reply);
       if (!ok) debugPrint('[Driving] start_driving failed: $reply');
       return ok;
     } catch (e) {
@@ -362,7 +370,7 @@ class _DrivingMapPageState extends State<DrivingMapPage>
 
       debugPrint('[Driving] accept drive result: $r');
 
-      if ((r['status'] ?? '').toString() == 'OK') {
+      if (_isOk(r)) {
         if (!mounted || _disposed) return;
         Navigator.of(context).pop(); // закрыть шит
 
@@ -397,7 +405,7 @@ class _DrivingMapPageState extends State<DrivingMapPage>
     try {
       final r = await DriverApi.declineDrive(requestId: reqId, driveId: driveId)
           .timeout(const Duration(seconds: 10));
-      if ((r['status'] ?? '').toString() == 'OK') {
+      if (_isOk(r)) {
         if (!mounted || _disposed) return;
         Navigator.of(context).pop(); // закрыть шит
         _offer = null;
@@ -445,8 +453,7 @@ class _DrivingMapPageState extends State<DrivingMapPage>
 
       if (_disposed) return;
 
-      final status = (reply['status'] ?? '').toString();
-      if (status != 'OK') {
+      if (!_isOk(reply)) {
         if (!mounted || _disposed) return;
         final msg = reply['message']?.toString() ?? 'Start driving failed';
         ScaffoldMessenger.of(context).showSnackBar(
@@ -503,10 +510,9 @@ class _DrivingMapPageState extends State<DrivingMapPage>
           return;
         }
 
-        final status = (reply['status'] ?? '').toString();
         final data = reply['data'];
 
-        if (status == 'OK') {
+        if (_isOk(reply)) {
           if (data is Map && (data['result']?.toString() == 'NOT_FOUND')) {
             await Future.delayed(const Duration(seconds: 10));
             continue;
@@ -542,6 +548,7 @@ class _DrivingMapPageState extends State<DrivingMapPage>
                 final durationStr = _formatDuration(_offer!['duration']);
                 final cost = ApiService.asString(data['cost']);
                 final currency = ApiService.asString(data['currency']);
+                final paymentTypeLabel = ApiService.asString(data['payment_type']);
                 final offerValid = ApiService.asInt(data['offer_valid']);
 
                 OfferSheet.show(
@@ -553,6 +560,7 @@ class _DrivingMapPageState extends State<DrivingMapPage>
                   distanceLabel: '${(distanceM / 1000).toStringAsFixed(1)} km',
                   durationLabel: durationStr,
                   priceLabel: '$currency $cost',
+                  paymentTypeLabel: paymentTypeLabel,
                   onAccept: _onAccept,
                   onDecline: _onDecline,
                   t: (k) => t(context, k),
@@ -708,7 +716,7 @@ class _DrivingMapPageState extends State<DrivingMapPage>
 
       if (_disposed) return;
 
-      if (reply['status'] != 'OK') {
+      if (!_isOk(reply)) {
         debugPrint('[DrivePoll] bad status: $reply');
         return;
       }
@@ -830,6 +838,7 @@ class _DrivingMapPageState extends State<DrivingMapPage>
       _stopDrivePolling();
       _routeId = null;
       _canArrived = _canStart = _canCancel = _canFinish = false;
+      await _showTripSummaryDialog(data);
       await _callStopDriving(); // navigate=true по умолчанию
       if (mounted && !_disposed) setState(() {});
       return;
@@ -892,11 +901,8 @@ class _DrivingMapPageState extends State<DrivingMapPage>
 
       if (_disposed) return;
 
-      if ((r['status'] ?? '').toString() == 'OK') {
+      if (_isOk(r)) {
         if (!mounted || _disposed) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(t(context, 'driving.arrived_done'))),
-        );
       } else {
         if (!mounted || _disposed) return;
         final msg = r['message']?.toString() ?? 'Arrived failed';
@@ -922,11 +928,8 @@ class _DrivingMapPageState extends State<DrivingMapPage>
       final r = await ApiService.callAndDecode('start_drive', {'drive_id': did})
           .timeout(const Duration(seconds: 15));
       if (_disposed) return;
-      if ((r['status'] ?? '').toString() == 'OK') {
+      if (_isOk(r)) {
         if (!mounted || _disposed) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(t(context, 'driving.started'))),
-        );
       } else {
         if (!mounted || _disposed) return;
         final msg = r['message']?.toString() ?? 'Start failed';
@@ -959,12 +962,8 @@ class _DrivingMapPageState extends State<DrivingMapPage>
 
       if (_disposed) return;
 
-      if ((r['status'] ?? '').toString() == 'OK') {
+      if (_isOk(r)) {
         if (!mounted || _disposed) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(t(context, 'driving.finished'))),
-        );
-        await _callStopDriving(); // navigate=true по умолчанию
       } else {
         if (!mounted || _disposed) return;
         final msg = r['message']?.toString() ?? 'Finish failed';
@@ -1017,7 +1016,7 @@ class _DrivingMapPageState extends State<DrivingMapPage>
 
       if (_disposed) return;
 
-      if ((r['status'] ?? '').toString() == 'OK') {
+      if (_isOk(r)) {
         await _callStopDriving(navigate: false);
 
         _driveId = null;
@@ -1133,13 +1132,110 @@ class _DrivingMapPageState extends State<DrivingMapPage>
     _mapPolylines.value = Set<Polyline>.from(_polylines);
   }
 
-  void _handleCameraMoveStarted() {
-    if (_camMoveProgrammatic) {
-      _camMoveProgrammatic = false; // это мы сами двигали — игнорируем
-      return;
-    }
+  String _formatMoney(String currency, String amount) {
+    if (currency.isEmpty) return amount;
+    if (amount.isEmpty) return currency;
+    return '$currency $amount';
+  }
+
+  Future<void> _showTripSummaryDialog(Map<String, dynamic> data) async {
+    if (!mounted || _disposed) return;
+
+    final currency = ApiService.asString(data['currency']);
+    final cost = ApiService.asString(data['cost']);
+    final paymentType = ApiService.asString(data['payment_type']);
+    final overprice = ApiService.asString(data['overprice']);
+    final distanceNum = ApiService.asNum(data['distance']);
+    final durationLabel = _formatDuration(data['duration']);
+
+    final distanceLabel = distanceNum > 0
+        ? '${(distanceNum / 1000).toStringAsFixed(1)} km'
+        : ApiService.asString(data['distance']);
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => WillPopScope(
+        onWillPop: () async => false,
+        child: AlertDialog(
+          title: Text(t(context, 'driving.summary_title')),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildSummaryRow(
+                t(context, 'driving.summary_cost'),
+                _formatMoney(currency, cost),
+              ),
+              _buildSummaryRow(
+                t(context, 'driving.summary_payment_type'),
+                paymentType,
+              ),
+              _buildSummaryRow(
+                t(context, 'driving.summary_overprice'),
+                _formatMoney(currency, overprice),
+              ),
+              _buildSummaryRow(
+                t(context, 'driving.summary_distance'),
+                distanceLabel,
+              ),
+              _buildSummaryRow(
+                t(context, 'driving.summary_duration'),
+                durationLabel,
+              ),
+            ],
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text(t(context, 'driving.summary_close')),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSummaryRow(String label, String value) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: Brand.textMuted,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            value,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: Brand.textDark,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _disableFollowMeOnUserMove() {
+    if (_camMoveProgrammatic) return;
     // Пользователь двинул карту: отключаем автоследование даже в наврежиме
     if (_followMe) setState(() => _followMe = false);
+  }
+
+  void _handleCameraMoveStarted() {
+    _disableFollowMeOnUserMove();
+  }
+
+  void _handleCameraMove(CameraPosition _) {
+    _disableFollowMeOnUserMove();
   }
 
   void _setRoutePolyline(List<LatLng> points) {
@@ -1211,6 +1307,8 @@ class _DrivingMapPageState extends State<DrivingMapPage>
     if (m != null) {
       final h = int.parse(m.group(1)!);
       final mi = int.parse(m.group(2)!);
+      final sec = int.parse(m.group(3)!);
+      if (h == 0 && mi == 0 && sec > 0) return '${sec}s';
       return _fmtHM(h, mi);
     }
 
@@ -1219,6 +1317,8 @@ class _DrivingMapPageState extends State<DrivingMapPage>
     if (ms != null) {
       final h = 0;
       final mi = int.parse(ms.group(1)!);
+      final sec = int.parse(ms.group(2)!);
+      if (h == 0 && mi == 0 && sec > 0) return '${sec}s';
       return _fmtHM(h, mi);
     }
 
@@ -1247,6 +1347,7 @@ class _DrivingMapPageState extends State<DrivingMapPage>
   }
 
   String _fmtSeconds(int sec) {
+    if (sec > 0 && sec < 60) return '${sec}s';
     final h = sec ~/ 3600;
     final m = (sec % 3600) ~/ 60;
     return _fmtHM(h, m);
@@ -1262,6 +1363,7 @@ class _DrivingMapPageState extends State<DrivingMapPage>
   Widget build(BuildContext context) {
     final bool _showActionBar = _driveId != null &&
         (_canArrived || _canStart || _canFinish || _canCancel);
+    final double actionBarOffset = _showActionBar ? 120 : 0;
 
     final theme = Theme.of(context);
 
@@ -1269,23 +1371,6 @@ class _DrivingMapPageState extends State<DrivingMapPage>
       appBar: AppBar(
         title: Text(t(context, 'driving.title')),
         actions: [
-          IconButton(
-            tooltip: _searching ? 'Stop searching' : 'Start searching',
-            onPressed: () {
-              if (_disposed) return;
-              setState(() {
-                _searching = !_searching;
-                if (_searching) {
-                  _radarCtrl.repeat();
-                  if (!_offerPolling && _offer == null) _startOfferPolling();
-                } else {
-                  _radarCtrl.stop();
-                  _offerPolling = false;
-                }
-              });
-            },
-            icon: Icon(_searching ? Icons.radar : Icons.radar_outlined),
-          ),
           IconButton(
             tooltip: _followMe ? 'Following' : 'Follow me',
             onPressed: () async {
@@ -1377,16 +1462,10 @@ class _DrivingMapPageState extends State<DrivingMapPage>
           // === ChatDock при ожидании пассажира (pickup) ===
           if (_pickupMode && _driveId != null)
             Positioned(
-              right: 16,
+              left: 16,
               bottom: 16 +
                   MediaQuery.of(context).padding.bottom +
-                  ((_driveId != null &&
-                          (_canArrived ||
-                              _canStart ||
-                              _canFinish ||
-                              _canCancel))
-                      ? 72
-                      : 0),
+                  actionBarOffset,
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -1402,7 +1481,7 @@ class _DrivingMapPageState extends State<DrivingMapPage>
             Positioned(
               left: 12,
               right: 12,
-              bottom: 16,
+              bottom: 32,
               child: SafeArea(
                 top: false,
                 child: PickupActionBar(
@@ -1424,9 +1503,13 @@ class _DrivingMapPageState extends State<DrivingMapPage>
             right: 16,
             bottom: 16 +
                 MediaQuery.of(context).padding.bottom +
-                (_showActionBar ? 96 : 0),
+                actionBarOffset,
             child: FloatingActionButton(
               tooltip: 'Center',
+              backgroundColor: Brand.yellowDark,
+              foregroundColor: Brand.textDark,
+              splashColor: Brand.yellow.withOpacity(0.2),
+              hoverColor: Brand.yellow.withOpacity(0.2),
               onPressed: () async {
                 if (_currentLatLng != null) {
                   if (!mounted || _disposed) return;
@@ -1456,6 +1539,7 @@ class _DrivingMapView extends StatelessWidget {
     required this.liteModeEnabled,
     required this.onMapCreated,
     required this.onCameraMoveStarted,
+    required this.onCameraMove,
   });
 
   final Completer<GoogleMapController> controller;
@@ -1465,6 +1549,7 @@ class _DrivingMapView extends StatelessWidget {
   final bool liteModeEnabled;
   final Future<void> Function(GoogleMapController) onMapCreated;
   final VoidCallback onCameraMoveStarted;
+  final ValueChanged<CameraPosition> onCameraMove;
 
   @override
   Widget build(BuildContext context) {
@@ -1490,6 +1575,7 @@ class _DrivingMapView extends StatelessWidget {
                 await onMapCreated(c);
               },
               onCameraMoveStarted: onCameraMoveStarted,
+              onCameraMove: onCameraMove,
             );
           },
         );

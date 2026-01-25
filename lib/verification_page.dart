@@ -145,11 +145,13 @@ class _VerificationPageState extends State<VerificationPage> {
       for (final item in images) {
         final file = item['file'] as File;
         final type = item['type'] as String;
+        final base64 = b64(file);
+        debugPrint('[Verification] upload $type base64 bytes=${base64.length}');
 
         final imageReply = await ApiService
             .callAndDecode('add_verification_image', {
           'type': type,
-          'base64': b64(file),
+          'base64': base64,
         }, timeoutSeconds: 300).timeout(const Duration(seconds: 300));
 
         final imageStatus = (imageReply is Map

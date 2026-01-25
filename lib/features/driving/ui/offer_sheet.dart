@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../../../brand.dart'; // поправь путь, если другой
 
 typedef AsyncAction = Future<void> Function();
@@ -15,6 +16,7 @@ class OfferSheet {
         required String distanceLabel,
         required String durationLabel,
         required String priceLabel, // "KHR 194862"
+        String? paymentTypeLabel,
         // колбэки
         required AsyncAction onAccept,
         required AsyncAction onDecline,
@@ -37,14 +39,18 @@ class OfferSheet {
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (_) {
-        final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+        final media = MediaQuery.of(context);
+        final bottomInset = media.viewInsets.bottom;
+        final bottomSafe = media.viewPadding.bottom;
+        final bottomPadding =
+            (bottomInset > bottomSafe ? bottomInset : bottomSafe) + 20;
 
         return Padding(
           padding: EdgeInsets.only(
             left: 16,
             right: 16,
             top: 12,
-            bottom: bottomInset + 20,
+            bottom: bottomPadding,
           ),
           child: _OfferSheetBody(
             fromName: fromName,
@@ -54,6 +60,7 @@ class OfferSheet {
             distanceLabel: distanceLabel,
             durationLabel: durationLabel,
             priceLabel: priceLabel,
+            paymentTypeLabel: paymentTypeLabel,
             onAccept: onAccept,
             onDecline: onDecline,
             t: t,
@@ -73,6 +80,7 @@ class _OfferSheetBody extends StatefulWidget {
   final String distanceLabel;
   final String durationLabel;
   final String priceLabel;
+  final String? paymentTypeLabel;
 
   final AsyncAction onAccept;
   final AsyncAction onDecline;
@@ -90,6 +98,7 @@ class _OfferSheetBody extends StatefulWidget {
     required this.distanceLabel,
     required this.durationLabel,
     required this.priceLabel,
+    this.paymentTypeLabel,
     required this.onAccept,
     required this.onDecline,
     required this.t,
@@ -276,13 +285,42 @@ class _OfferSheetBodyState extends State<_OfferSheetBody> {
         ),
         const Spacer(),
         // крупная цена
-        Text(
-          widget.priceLabel,
-          style: theme.textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.w800,
-            color: Brand.textDark,
-          ),
-          textAlign: TextAlign.right,
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              widget.priceLabel,
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w800,
+                color: Brand.textDark,
+              ),
+              textAlign: TextAlign.right,
+            ),
+            if (widget.paymentTypeLabel != null &&
+                widget.paymentTypeLabel!.trim().isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SvgPicture.asset(
+                      'assets/images/${widget.paymentTypeLabel!.trim().toLowerCase()}.svg',
+                      width: 20,
+                      height: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      widget.paymentTypeLabel!,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: Brand.textMuted,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      textAlign: TextAlign.right,
+                    ),
+                  ],
+                ),
+              ),
+          ],
         ),
       ],
     );

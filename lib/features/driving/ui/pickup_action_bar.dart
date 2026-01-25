@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../brand.dart';
 
 class PickupActionBar extends StatelessWidget {
   final bool canArrived;
@@ -40,6 +41,10 @@ class PickupActionBar extends StatelessWidget {
       children.add(
         Expanded(
           child: FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: Brand.yellowDark,
+              foregroundColor: Brand.textDark,
+            ),
             onPressed: busy ? null : onArrived,
             icon: const Icon(Icons.flag_circle),
             label: Text(t('driving.arrived')),
@@ -56,6 +61,10 @@ class PickupActionBar extends StatelessWidget {
       children.add(
         Expanded(
           child: FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: Brand.yellowDark,
+              foregroundColor: Brand.textDark,
+            ),
             onPressed: busy ? null : onStart,
             icon: const Icon(Icons.play_arrow),
             label: Text(t('driving.start')),
@@ -72,6 +81,10 @@ class PickupActionBar extends StatelessWidget {
       children.add(
         Expanded(
           child: FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: Brand.yellowDark,
+              foregroundColor: Brand.textDark,
+            ),
             onPressed: busy ? null : onFinish,
             icon: const Icon(Icons.check_circle),
             label: Text(t('driving.finish')),
@@ -88,6 +101,10 @@ class PickupActionBar extends StatelessWidget {
       children.add(
         Expanded(
           child: OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Brand.textDark,
+              side: const BorderSide(color: Brand.border),
+            ),
             onPressed: busy ? null : onCancel,
             icon: const Icon(Icons.close),
             label: Text(t('driving.cancel_drive')),
