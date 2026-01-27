@@ -23,8 +23,10 @@ class _VerificationPageState extends State<VerificationPage> {
 
   final _picker = ImagePicker();
   File? _passportFile;
+  File? _passport2File;
   File? _licenseFile;
   File? _commercialFile;
+  File? _commercial2File;
   File? _license2File;
   File? _selfieFile;
   File? _selfieAppFile;
@@ -66,9 +68,11 @@ class _VerificationPageState extends State<VerificationPage> {
         if (kind == 'passport') _passportFile = file;
         if (kind == 'license') _licenseFile = file;
         if (kind == 'commercial') _commercialFile = file;
+        if (kind == 'commercial2') _commercial2File = file;
         if (kind == 'license2') _license2File = file;
         if (kind == 'selfie') _selfieFile = file;
         if (kind == 'selfie_app') _selfieAppFile = file;
+        if (kind == 'passport2') _passport2File = file;
       });
     } catch (e) {
       setState(() => _error = '${t(context, "verification.error.capture")}: $e');
@@ -78,6 +82,7 @@ class _VerificationPageState extends State<VerificationPage> {
   bool get _canSubmit =>
       _formKey.currentState?.validate() == true &&
           _passportFile != null &&
+          _passport2File != null &&
           _licenseFile != null &&
           _selfieFile != null &&
           _selfieAppFile != null &&
@@ -102,8 +107,13 @@ class _VerificationPageState extends State<VerificationPage> {
 
       final allImages = [
         {'type': 'PASSPORT_IMAGE', 'file': _passportFile},
+        {'type': 'PASSPORT2_IMAGE', 'file': _passport2File},
         {'type': 'DRIVE_LICENCE_IMAGE', 'file': _licenseFile},
         {'type': 'COMMERCIAL_DRIVER_LICENSE', 'file': _commercialFile},
+        {
+          'type': 'COMMERCIAL_DRIVER_LICENSE2_IMAGE',
+          'file': _commercial2File,
+        },
         {'type': 'DRIVE_LICENCE2_IMAGE', 'file': _license2File},
         {'type': 'SELFIE_IMAGE', 'file': _selfieFile},
         {'type': 'SELFIE_FOR_APP_IMAGE', 'file': _selfieAppFile},
@@ -250,8 +260,18 @@ class _VerificationPageState extends State<VerificationPage> {
                     if (_currentStep == 0) {
                       if (_formKey.currentState?.validate() != true) return;
                     }
-                    if (_currentStep == 1 && _passportFile == null) return;
+                    if (_currentStep == 1 &&
+                        (_passportFile == null || _passport2File == null)) {
+                      return;
+                    }
                     if (_currentStep == 2 && _licenseFile == null) return;
+                    if (_currentStep == 3) {
+                      final anyCommercial =
+                          _commercialFile != null || _commercial2File != null;
+                      final bothCommercial =
+                          _commercialFile != null && _commercial2File != null;
+                      if (anyCommercial && !bothCommercial) return;
+                    }
                     if (_currentStep == 5) {
                       if (_selfieAppFile == null) return;
                       if (!_selfieAppCollapsed) {
@@ -330,17 +350,42 @@ class _VerificationPageState extends State<VerificationPage> {
                       Text(t(context, 'verification.step.passport.title')),
                       subtitle: Text(t(context, 'verification.doc.hint.valid')),
                       isActive: _currentStep >= 1,
-                      state: _passportFile != null
+                      state: _passportFile != null && _passport2File != null
                           ? StepState.complete
                           : StepState.indexed,
-                      content: _DocStep(
-                        file: _passportFile,
-                        hint: t(context, 'verification.step.passport.hint'),
-                        onTake: () => _pickImageFor('passport'),
-                        onPickGallery: () => _pickImageFor(
-                          'passport',
-                          source: ImageSource.gallery,
-                        ),
+                      content: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            t(context, 'verification.step.passport.front'),
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                          const SizedBox(height: 8),
+                          _DocStep(
+                            file: _passportFile,
+                            hint: t(context, 'verification.step.passport.hint'),
+                            onTake: () => _pickImageFor('passport'),
+                            onPickGallery: () => _pickImageFor(
+                              'passport',
+                              source: ImageSource.gallery,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            t(context, 'verification.step.passport.back'),
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                          const SizedBox(height: 8),
+                          _DocStep(
+                            file: _passport2File,
+                            hint: t(context, 'verification.step.passport.hint'),
+                            onTake: () => _pickImageFor('passport2'),
+                            onPickGallery: () => _pickImageFor(
+                              'passport2',
+                              source: ImageSource.gallery,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     Step(
@@ -354,6 +399,11 @@ class _VerificationPageState extends State<VerificationPage> {
                       content: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          Text(
+                            t(context, 'verification.step.license.front'),
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                          const SizedBox(height: 8),
                           _DocStep(
                             file: _licenseFile,
                             hint: t(context, 'verification.step.license.hint'),
@@ -365,7 +415,7 @@ class _VerificationPageState extends State<VerificationPage> {
                           ),
                           const SizedBox(height: 16),
                           Text(
-                            t(context, 'verification.step.license2.title'),
+                            t(context, 'verification.step.license.back'),
                             style: Theme.of(context).textTheme.titleSmall,
                           ),
                           const SizedBox(height: 8),
@@ -386,17 +436,42 @@ class _VerificationPageState extends State<VerificationPage> {
                       Text(t(context, 'verification.step.commercial.title')),
                       subtitle: Text(t(context, 'verification.doc.hint.valid')),
                       isActive: _currentStep >= 3,
-                      state: _commercialFile != null
+                      state: _commercialFile != null && _commercial2File != null
                           ? StepState.complete
                           : StepState.indexed,
-                      content: _DocStep(
-                        file: _commercialFile,
-                        hint: t(context, 'verification.step.license.hint'),
-                        onTake: () => _pickImageFor('commercial'),
-                        onPickGallery: () => _pickImageFor(
-                          'commercial',
-                          source: ImageSource.gallery,
-                        ),
+                      content: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            t(context, 'verification.step.commercial.front'),
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                          const SizedBox(height: 8),
+                          _DocStep(
+                            file: _commercialFile,
+                            hint: t(context, 'verification.step.license.hint'),
+                            onTake: () => _pickImageFor('commercial'),
+                            onPickGallery: () => _pickImageFor(
+                              'commercial',
+                              source: ImageSource.gallery,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            t(context, 'verification.step.commercial.back'),
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                          const SizedBox(height: 8),
+                          _DocStep(
+                            file: _commercial2File,
+                            hint: t(context, 'verification.step.license.hint'),
+                            onTake: () => _pickImageFor('commercial2'),
+                            onPickGallery: () => _pickImageFor(
+                              'commercial2',
+                              source: ImageSource.gallery,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     Step(

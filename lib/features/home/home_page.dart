@@ -29,6 +29,7 @@ import 'widgets/settings_sheet.dart';
 import 'widgets/driver_settings_sheet.dart';
 import 'widgets/transactions_section.dart';
 import '../driving/driving_map_page.dart';
+import 'drives_history_page.dart';
 
 // шарящий ReferralCard (Branch/QR) — отдельный виджет
 import '../referral/referral_card.dart' as Share;
@@ -550,16 +551,10 @@ class _HomePageState extends State<HomePage> with RouteAware {
           rootContext: context,
           details: d,
           onInvite: _openShareReferral,
-          onOpenVerification: _openVerification,
-          onOpenCar: _onAddCar,
           onOpenTransactions: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(t(context, 'common.not_implemented'))),
-            );
-          },
-          onOpenAccounts: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(t(context, 'common.not_implemented'))),
+            _scaffoldKey.currentState?.closeDrawer();
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const DrivesHistoryPage()),
             );
           },
           onOpenSettings: () {
@@ -587,11 +582,23 @@ class _HomePageState extends State<HomePage> with RouteAware {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        CircleAvatar(
-                          radius: 24,
-                          child: Text(
-                            _initials(d.name),
-                            style: const TextStyle(fontWeight: FontWeight.w600),
+                        Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Brand.yellowDark, width: 1.5),
+                            color: Brand.yellow.withOpacity(0.18),
+                          ),
+                          child: CircleAvatar(
+                            radius: 28,
+                            backgroundColor: Colors.transparent,
+                            child: Text(
+                              _initials(d.name),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: Brand.textDark,
+                              ),
+                            ),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -614,32 +621,95 @@ class _HomePageState extends State<HomePage> with RouteAware {
                                   if (status ==
                                       DriverVerificationStatus.verified) ...[
                                     const SizedBox(width: 8),
-                                    const Icon(Icons.verified,
-                                        size: 18, color: Colors.green),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.green.withOpacity(0.12),
+                                        borderRadius: BorderRadius.circular(999),
+                                        border: Border.all(
+                                          color: Colors.green.withOpacity(0.35),
+                                        ),
+                                      ),
+                                      child: const Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.verified,
+                                              size: 16, color: Colors.green),
+                                          SizedBox(width: 4),
+                                          Text(
+                                            'Verified',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              color: Colors.green,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
                                   ],
                                 ],
                               ),
                               const SizedBox(height: 4),
-                              Row(
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                crossAxisAlignment: WrapCrossAlignment.center,
                                 children: [
-                                  const Icon(Icons.star, size: 16),
-                                  const SizedBox(width: 6),
-                                  Flexible(
-                                    child: Text(
-                                      d.rating.isEmpty ? '—' : d.rating,
-                                      style: theme.textTheme.bodyMedium,
-                                      overflow: TextOverflow.ellipsis,
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Brand.yellow.withOpacity(0.18),
+                                      borderRadius: BorderRadius.circular(999),
+                                      border: Border.all(color: Brand.yellowDark),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(Icons.star, size: 16),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          d.rating.isEmpty ? '—' : d.rating,
+                                          style: theme.textTheme.bodyMedium
+                                              ?.copyWith(fontWeight: FontWeight.w600),
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                  const Spacer(),
-                                  const Icon(Icons.tag, size: 16),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    '${t(context, "home.referral.your_id")}: ${d.id}',
-                                    style: theme.textTheme.bodyMedium,
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(999),
+                                      border: Border.all(color: Brand.yellowDark),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(Icons.badge_outlined, size: 16),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          '${t(context, "home.referral.your_id")}: ${d.id}',
+                                          style: theme.textTheme.bodyMedium
+                                              ?.copyWith(fontWeight: FontWeight.w600),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                   IconButton(
                                     tooltip: t(context, 'common.copy'),
+                                    style: IconButton.styleFrom(
+                                      backgroundColor: Brand.yellow.withOpacity(0.22),
+                                      side: const BorderSide(color: Brand.yellowDark),
+                                    ),
                                     icon: const Icon(Icons.copy, size: 18),
                                     onPressed: () async {
                                       await Clipboard.setData(

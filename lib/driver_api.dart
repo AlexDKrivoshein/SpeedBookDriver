@@ -182,6 +182,58 @@ class DriverTransaction {
       };
 }
 
+class DriverDriveHistory {
+  final int id;
+  final double cost;
+  final String currency;
+  final int distance;
+  final double overprice;
+  final DateTime? date;
+  final DateTime? started;
+  final DateTime? ended;
+
+  DriverDriveHistory({
+    required this.id,
+    required this.cost,
+    required this.currency,
+    required this.distance,
+    required this.overprice,
+    required this.date,
+    required this.started,
+    required this.ended,
+  });
+
+  factory DriverDriveHistory.fromJson(Map<String, dynamic> json) {
+    DateTime? parseDt(dynamic v) {
+      final s = (v ?? '').toString().trim();
+      if (s.isEmpty) return null;
+      try {
+        return DateTime.parse(s).toLocal();
+      } catch (_) {
+        return null;
+      }
+    }
+
+    double parseDouble(dynamic v) =>
+        double.tryParse((v ?? '0').toString()) ?? 0.0;
+
+    return DriverDriveHistory(
+      id: (json['id'] is int)
+          ? json['id'] as int
+          : int.tryParse((json['id'] ?? '0').toString()) ?? 0,
+      cost: parseDouble(json['cost']),
+      currency: (json['currency'] ?? '').toString(),
+      distance: (json['distance'] is int)
+          ? json['distance'] as int
+          : int.tryParse((json['distance'] ?? '0').toString()) ?? 0,
+      overprice: parseDouble(json['overprice']),
+      date: parseDt(json['date']),
+      started: parseDt(json['started']),
+      ended: parseDt(json['ended']),
+    );
+  }
+}
+
 class CarModel {
   final int id;
   final String name;
@@ -404,6 +456,29 @@ class DriverApi {
     return list.map((e) => DriverTransaction.fromJson(e)).toList();
   }
 
+  static Future<List<DriverDriveHistory>> getDriversDrivesHistory({
+    required String from,
+    required String to,
+  }) async {
+    final res = await ApiService.callAndDecode(
+      'get_drivers_drives_history',
+      {
+        'from': from,
+        'to': to,
+      },
+      timeoutSeconds: 300,
+    ).timeout(const Duration(seconds: 300));
+
+    final raw = (res['data'] is Map<String, dynamic>)
+        ? (res['data'] as Map<String, dynamic>)['drives']
+        : null;
+    final list = (raw is List) ? raw : const [];
+    return list
+        .whereType<Map>()
+        .map((e) => DriverDriveHistory.fromJson(e.cast<String, dynamic>()))
+        .toList();
+  }
+
   /// Возвращает lookup-данные для формы (vehicle types/brands/models/colors)
   static Future<VerificationPreData> getVerificationPreData() async {
     final res = await ApiService.callAndDecode('get_verification_pre_data', {})
@@ -418,9 +493,11 @@ class DriverApi {
     required String colorHex,
     required String number,
     required int year,
-    required Uint8List carDocFile, // один обязательный файл
+    required Uint8List carDocFile, // front
+    required Uint8List carDocFile2, // back
     required List<Uint8List> carPhotos, // минимум 4 фото автомобиля
     Uint8List? vehicleInspectionFile,
+    Uint8List? vehicleInspectionFile2,
     void Function(int done, int total)? onProgress,
   }) async {
     String b64(Uint8List f) => base64Encode(f);
@@ -436,10 +513,16 @@ class DriverApi {
 
     final images = <Map<String, Object>>[
       {'type': 'VEHICLE_IMAGE', 'file': carDocFile},
+      {'type': 'VEHICLE_IMAGE2', 'file': carDocFile2},
       for (int i = 0; i < carPhotos.length; i++)
         {'type': 'CAR${i + 1}_IMAGE', 'file': carPhotos[i]},
       if (vehicleInspectionFile != null)
         {'type': 'VEHICLE_INSPECTION_IMAGE', 'file': vehicleInspectionFile},
+      if (vehicleInspectionFile2 != null)
+        {
+          'type': 'VEHICLE_INSPECTION_IMAGE2',
+          'file': vehicleInspectionFile2,
+        },
     ];
     final totalSteps = images.length + 1;
     onProgress?.call(0, totalSteps);

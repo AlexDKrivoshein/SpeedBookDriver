@@ -49,7 +49,9 @@ class _AddCarPageState extends State<AddCarPage> {
   // single required document
   final ImagePicker _picker = ImagePicker();
   Uint8List? _carDocFile;
+  Uint8List? _carDocFile2;
   Uint8List? _inspectionFile;
+  Uint8List? _inspectionFile2;
   final List<Uint8List> _carPhotos = [];
 
   @override
@@ -144,20 +146,25 @@ class _AddCarPageState extends State<AddCarPage> {
     return ok ? null : _requiredText(ctx);
   }
 
-  bool get _docValid => _carDocFile != null;
+  bool get _docValid => _carDocFile != null && _carDocFile2 != null;
   bool get _photosValid => _carPhotos.length >= 4;
+  bool get _inspectionPairValid =>
+      (_inspectionFile == null && _inspectionFile2 == null) ||
+      (_inspectionFile != null && _inspectionFile2 != null);
 
   // ----- submit -----
   Future<void> _submit() async {
     setState(() => _submittedOnce = true);
 
     final valid = _formKey.currentState?.validate() ?? false;
-    if (!valid || !_docValid || !_photosValid) {
+    if (!valid || !_docValid || !_photosValid || !_inspectionPairValid) {
       final msg = !_docValid
           ? t(context, 'home.vehicle.docs.required')
           : !_photosValid
-          ? t(context, 'home.vehicle.photos.required')
-          : t(context, 'common.fill_all_required');
+              ? t(context, 'home.vehicle.photos.required')
+              : !_inspectionPairValid
+                  ? t(context, 'home.vehicle.inspection.required')
+                  : t(context, 'common.fill_all_required');
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
       return;
     }
@@ -176,8 +183,10 @@ class _AddCarPageState extends State<AddCarPage> {
         number: _numberCtrl.text.trim(),
         year: _selYear!,
         carDocFile: _carDocFile!,
+        carDocFile2: _carDocFile2!,
         carPhotos: _carPhotos,
         vehicleInspectionFile: _inspectionFile,
+        vehicleInspectionFile2: _inspectionFile2,
         onProgress: (done, total) {
           if (!mounted) return;
           setState(() {
@@ -258,6 +267,47 @@ class _AddCarPageState extends State<AddCarPage> {
     setState(() {});
   }
 
+  Future<void> _pickDoc2FromGallery() async {
+    try {
+      final x = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 70,
+        maxWidth: 2560,
+      );
+      if (x == null) return;
+      _carDocFile2 = await x.readAsBytes();
+      setState(() {});
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('${t(context, "common.error")}: $e')));
+      }
+    }
+  }
+
+  Future<void> _takeDoc2Photo() async {
+    try {
+      final x = await _picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 70,
+        maxWidth: 2560,
+      );
+      if (x == null) return;
+      _carDocFile2 = await x.readAsBytes();
+      setState(() {});
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('${t(context, "common.error")}: $e')));
+      }
+    }
+  }
+
+  void _removeDoc2() {
+    _carDocFile2 = null;
+    setState(() {});
+  }
+
   Future<void> _pickInspectionFromGallery() async {
     try {
       final x = await _picker.pickImage(
@@ -296,6 +346,47 @@ class _AddCarPageState extends State<AddCarPage> {
 
   void _removeInspection() {
     _inspectionFile = null;
+    setState(() {});
+  }
+
+  Future<void> _pickInspection2FromGallery() async {
+    try {
+      final x = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 70,
+        maxWidth: 2560,
+      );
+      if (x == null) return;
+      _inspectionFile2 = await x.readAsBytes();
+      setState(() {});
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('${t(context, "common.error")}: $e')));
+      }
+    }
+  }
+
+  Future<void> _takeInspection2Photo() async {
+    try {
+      final x = await _picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 70,
+        maxWidth: 2560,
+      );
+      if (x == null) return;
+      _inspectionFile2 = await x.readAsBytes();
+      setState(() {});
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('${t(context, "common.error")}: $e')));
+      }
+    }
+  }
+
+  void _removeInspection2() {
+    _inspectionFile2 = null;
     setState(() {});
   }
 
@@ -487,11 +578,16 @@ class _AddCarPageState extends State<AddCarPage> {
               ),
               const SizedBox(height: 12),
 
-              // vehicle document (required)
+              // vehicle registration document (required)
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _labelRich('home.vehicle.docs', required: true),
+                  const SizedBox(height: 6),
+                  Text(
+                    t(context, 'home.vehicle.docs.front'),
+                    style: theme.textTheme.titleSmall,
+                  ),
                   const SizedBox(height: 6),
                   Row(
                     children: [
@@ -513,7 +609,6 @@ class _AddCarPageState extends State<AddCarPage> {
                     ],
                   ),
                   const SizedBox(height: 8),
-
                   if (_carDocFile != null)
                     Stack(
                       alignment: Alignment.topRight,
@@ -534,16 +629,73 @@ class _AddCarPageState extends State<AddCarPage> {
                             icon: const Icon(Icons.close),
                             tooltip: t(context, 'common.remove'),
                             style: ButtonStyle(
-                              backgroundColor: WidgetStateProperty.all(Colors.black45),
-                              foregroundColor: WidgetStateProperty.all(Colors.white),
+                              backgroundColor:
+                                  WidgetStateProperty.all(Colors.black45),
+                              foregroundColor:
+                                  WidgetStateProperty.all(Colors.white),
                             ),
                           ),
                         ),
                       ],
-                    )
-                  else if (_submittedOnce)
+                    ),
+                  const SizedBox(height: 12),
+                  Text(
+                    t(context, 'home.vehicle.docs.back'),
+                    style: theme.textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _pickDoc2FromGallery,
+                          icon: const Icon(Icons.photo_library_outlined),
+                          label: Text(t(context, 'home.vehicle.docs.add')),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _takeDoc2Photo,
+                          icon: const Icon(Icons.photo_camera_outlined),
+                          label: Text(t(context, 'home.vehicle.docs.take')),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  if (_carDocFile2 != null)
+                    Stack(
+                      alignment: Alignment.topRight,
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.memory(
+                            _carDocFile2!,
+                            width: 120,
+                            height: 120,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                        Material(
+                          color: Colors.transparent,
+                          child: IconButton(
+                            onPressed: _removeDoc2,
+                            icon: const Icon(Icons.close),
+                            tooltip: t(context, 'common.remove'),
+                            style: ButtonStyle(
+                              backgroundColor:
+                                  WidgetStateProperty.all(Colors.black45),
+                              foregroundColor:
+                                  WidgetStateProperty.all(Colors.white),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  if (_submittedOnce && !_docValid)
                     Padding(
-                      padding: const EdgeInsets.only(top: 2),
+                      padding: const EdgeInsets.only(top: 4),
                       child: Text(
                         t(context, 'home.vehicle.docs.required'),
                         style: TextStyle(
@@ -552,10 +704,14 @@ class _AddCarPageState extends State<AddCarPage> {
                         ),
                       ),
                     )
-                  else
-                    Text(
-                      t(context, 'home.vehicle.docs.required'),
-                      style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
+                  else if (!_docValid)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        t(context, 'home.vehicle.docs.required'),
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: theme.hintColor),
+                      ),
                     ),
                 ],
               ),
@@ -663,6 +819,11 @@ class _AddCarPageState extends State<AddCarPage> {
                 children: [
                   _labelRich('home.vehicle.inspection', required: false),
                   const SizedBox(height: 6),
+                  Text(
+                    t(context, 'home.vehicle.inspection.front'),
+                    style: theme.textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 6),
                   Row(
                     children: [
                       Expanded(
@@ -711,12 +872,70 @@ class _AddCarPageState extends State<AddCarPage> {
                           ),
                         ),
                       ],
-                    )
-                  else
-                    Text(
-                      t(context, 'home.vehicle.inspection.hint'),
-                      style:
-                          theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
+                    ),
+                  const SizedBox(height: 12),
+                  Text(
+                    t(context, 'home.vehicle.inspection.back'),
+                    style: theme.textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _pickInspection2FromGallery,
+                          icon: const Icon(Icons.photo_library_outlined),
+                          label: Text(t(context, 'home.vehicle.docs.add')),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _takeInspection2Photo,
+                          icon: const Icon(Icons.photo_camera_outlined),
+                          label: Text(t(context, 'home.vehicle.docs.take')),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  if (_inspectionFile2 != null)
+                    Stack(
+                      alignment: Alignment.topRight,
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.memory(
+                            _inspectionFile2!,
+                            width: 120,
+                            height: 120,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                        Material(
+                          color: Colors.transparent,
+                          child: IconButton(
+                            onPressed: _removeInspection2,
+                            icon: const Icon(Icons.close),
+                            tooltip: t(context, 'common.remove'),
+                            style: ButtonStyle(
+                              backgroundColor:
+                                  WidgetStateProperty.all(Colors.black45),
+                              foregroundColor:
+                                  WidgetStateProperty.all(Colors.white),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  if (_inspectionFile == null && _inspectionFile2 == null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        t(context, 'home.vehicle.inspection.hint'),
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: theme.hintColor),
+                      ),
                     ),
                 ],
               ),

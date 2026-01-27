@@ -1,21 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../../brand.dart';
 import '../../../driver_api.dart'; // DriverDetails
 import '../../../translations.dart';
 
-class HomeMenu extends StatelessWidget {
+class HomeMenu extends StatefulWidget {
   const HomeMenu({
     super.key,
     required this.rootContext,
     required this.details,
     required this.onInvite,
-    required this.onOpenVerification,
-    required this.onOpenCar,
     required this.onOpenTransactions,
-    required this.onOpenAccounts,
     required this.onOpenSettings,
     required this.onOpenSupport,
     required this.onPickLanguage,
@@ -26,10 +22,7 @@ class HomeMenu extends StatelessWidget {
   final BuildContext rootContext;
   final DriverDetails details;
   final VoidCallback onInvite;
-  final VoidCallback onOpenVerification;
-  final VoidCallback onOpenCar;
   final VoidCallback onOpenTransactions;
-  final VoidCallback onOpenAccounts;
   final VoidCallback onOpenSettings;
   final VoidCallback onOpenSupport;
   final Future<void> Function(BuildContext) onPickLanguage;
@@ -37,8 +30,32 @@ class HomeMenu extends StatelessWidget {
   final Future<void> Function(BuildContext) onDeleteAccount;
 
   @override
+  State<HomeMenu> createState() => _HomeMenuState();
+}
+
+class _HomeMenuState extends State<HomeMenu> {
+  String? _versionLabel;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadVersion();
+  }
+
+  Future<void> _loadVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (!mounted) return;
+      setState(() => _versionLabel = info.version);
+    } catch (_) {
+      // Ignore version errors in the menu header.
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final verified = (details.driverClass ?? '').toUpperCase() == 'VERIFIED';
+    final details = widget.details;
+    final verified = details.driverClass.toUpperCase() == 'VERIFIED';
 
     return Drawer(
       width: 320,
@@ -107,6 +124,16 @@ class HomeMenu extends StatelessWidget {
                             ),
                           ],
                         ),
+                        if (_versionLabel != null) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            'v$_versionLabel',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(color: Colors.black54),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -120,26 +147,42 @@ class HomeMenu extends StatelessWidget {
               child: ListView(
                 padding: EdgeInsets.zero,
                 children: [
-                  if (!verified)
-                    _tile(context, Icons.verified_user, t(context, 'menu.verification'), onOpenVerification),
+                  _tile(
+                    context,
+                    Icons.receipt_long,
+                    t(context, 'menu.drives'),
+                    widget.onOpenTransactions,
+                  ),
 
-                  _tile(context, Icons.directions_car_filled, t(context, 'menu.car'), onOpenCar),
-
-                  _tile(context, Icons.account_balance_wallet, t(context, 'menu.accounts'), onOpenAccounts),
-
-                  _tile(context, Icons.receipt_long, t(context, 'menu.transactions'), onOpenTransactions),
-
-                  _tile(context, Icons.ios_share, t(context, 'menu.invite'), onInvite),
+                  _tile(
+                    context,
+                    Icons.ios_share,
+                    t(context, 'menu.invite'),
+                    widget.onInvite,
+                  ),
 
                   const Divider(height: 16),
 
-                  _tile(context, Icons.settings, t(context, 'menu.settings'), onOpenSettings),
-
-                  _tile(context, Icons.language, t(context, 'menu.language'),
-                        () => onPickLanguage(rootContext),
+                  _tile(
+                    context,
+                    Icons.settings,
+                    t(context, 'menu.settings'),
+                    widget.onOpenSettings,
                   ),
 
-                  _tile(context, Icons.support_agent, t(context, 'menu.support'), onOpenSupport),
+                  _tile(
+                    context,
+                    Icons.language,
+                    t(context, 'menu.language'),
+                    () => widget.onPickLanguage(widget.rootContext),
+                  ),
+
+                  _tile(
+                    context,
+                    Icons.support_agent,
+                    t(context, 'menu.support'),
+                    widget.onOpenSupport,
+                  ),
                 ],
               ),
             ),
@@ -149,7 +192,7 @@ class HomeMenu extends StatelessWidget {
               child: SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
-                  onPressed: () => onLogout(context),
+                  onPressed: () => widget.onLogout(context),
                   icon: const Icon(Icons.logout),
                   label: Text(t(context, 'menu.logout')),
                 ),
@@ -160,7 +203,7 @@ class HomeMenu extends StatelessWidget {
               child: SizedBox(
                 width: double.infinity,
                 child: TextButton.icon(
-                  onPressed: () => onDeleteAccount(context),
+                  onPressed: () => widget.onDeleteAccount(context),
                   icon: const Icon(Icons.delete_forever, color: Colors.red),
                   label: const Text(
                     'Delete my account',
