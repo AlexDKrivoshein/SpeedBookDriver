@@ -23,11 +23,13 @@ import 'translations.dart';
 class SmsInputPage extends StatefulWidget {
   final String phone;
   final String verificationId;
+  final bool useCustomOtp;
 
   const SmsInputPage({
     super.key,
     required this.phone,
     required this.verificationId,
+    this.useCustomOtp = false,
   });
 
   @override
@@ -130,6 +132,16 @@ class _SmsInputPageState extends State<SmsInputPage>
   Future<void> _resendCode() async {
     if (_submitting) return;
     try {
+      if (widget.useCustomOtp) {
+        final key = await _requestOtpCustom(widget.phone);
+        if (!mounted) return;
+        if (key != null && key.isNotEmpty) {
+          _verificationId = key;
+          _startCountdown();
+        }
+        return;
+      }
+
       final lang = context.read<Translations>().lang;
       try {
         await _auth.setLanguageCode(lang);
@@ -213,6 +225,98 @@ class _SmsInputPageState extends State<SmsInputPage>
       }
     } catch (_) {}
     return {'device': device, 'osVersion': osVersion};
+  }
+
+  String _extractMessage(Map<String, dynamic> json,
+      {String fallback = 'Error'}) {
+    final msg = (json['message']?.toString() ?? '').trim();
+    if (msg.isNotEmpty) return msg;
+    return fallback;
+  }
+
+  Future<String?> _requestOtpCustom(String phoneNumber) async {
+    if (_apiUrl == null || _apiUrl!.isEmpty) {
+      await _loadApiUrl();
+    }
+    if (_apiUrl == null || _apiUrl!.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(t(context, 'common.api_url_missing'))),
+        );
+      }
+      return null;
+    }
+
+    final info = await PackageInfo.fromPlatform();
+    final platform =
+    Platform.isAndroid ? 'android' : (Platform.isIOS ? 'ios' : 'unknown');
+    final deviceInfo = await _getDeviceInfo();
+    final locale =
+        WidgetsBinding.instance.platformDispatcher.locale.languageCode;
+
+    try {
+      final resp = await http
+          .post(
+        Uri.parse('${_apiUrl!}/api/request_otp'),
+        headers: const {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'phoneNumber': phoneNumber,
+          'platform': platform,
+          'device': deviceInfo['device'],
+          'app_version': info.version,
+          'locale': locale,
+          'is_driver': true,
+        }),
+      )
+          .timeout(const Duration(seconds: 15));
+
+      final parsed = jsonDecode(resp.body);
+      if (parsed is! Map<String, dynamic>) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(t(context, 'common.unknown_error'))),
+          );
+        }
+        return null;
+      }
+
+      final status = (parsed['status'] ?? '').toString().toUpperCase();
+      if (status != 'OK') {
+        final msg = _extractMessage(parsed, fallback: t(context, 'common.error'));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(msg)),
+          );
+        }
+        return null;
+      }
+
+      final data = parsed['data'];
+      final key = data is Map<String, dynamic> ? data['key']?.toString() : null;
+      if (key == null || key.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(t(context, 'common.unknown_error'))),
+          );
+        }
+        return null;
+      }
+      return key;
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${t(context, 'common.error')}: $e')),
+        );
+      }
+      return null;
+    }
+  }
+
+  Future<void> _clearPendingReferral(SharedPreferences prefs) async {
+    final hadReferral = prefs.getString('referral.pending_inviter_id');
+    if (hadReferral != null && hadReferral.isNotEmpty) {
+      await prefs.remove('referral.pending_inviter_id');
+    }
   }
 
   String _msgForFirebaseError(
@@ -361,10 +465,7 @@ class _SmsInputPageState extends State<SmsInputPage>
       debugPrint('[SMSInput] token: $token, secret: ${secret is String ? "***" : secret}');
 
       // очищаем pending реферал
-      final hadReferral = prefs.getString('referral.pending_inviter_id');
-      if (hadReferral != null && hadReferral.isNotEmpty) {
-        await prefs.remove('referral.pending_inviter_id');
-      }
+      await _clearPendingReferral(prefs);
 
       if (token is String &&
           token.isNotEmpty &&
@@ -407,6 +508,92 @@ class _SmsInputPageState extends State<SmsInputPage>
     }
   }
 
+  Future<bool> _verifyOtpCustom() async {
+    if (_apiUrl == null || _apiUrl!.isEmpty) {
+      await _loadApiUrl();
+    }
+    if (_apiUrl == null || _apiUrl!.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(t(context, 'common.api_url_missing'))),
+        );
+      }
+      return false;
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    final fcmToken = await _getFcmTokenWithPermissions();
+    final utmSource = prefs.getString('utm_source');
+    final utmMedium = prefs.getString('utm_medium');
+    final utmCampaign = prefs.getString('utm_campaign');
+
+    try {
+      final resp = await http
+          .post(
+        Uri.parse('${_apiUrl!}/api/verify_otp'),
+        headers: const {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'key': _verificationId,
+          'code': _code,
+          if (fcmToken?.isNotEmpty == true) 'fcm_token': fcmToken,
+          if (utmSource?.isNotEmpty == true) 'utm_source': utmSource,
+          if (utmMedium?.isNotEmpty == true) 'utm_medium': utmMedium,
+          if (utmCampaign?.isNotEmpty == true) 'utm_campaign': utmCampaign,
+        }),
+      )
+          .timeout(const Duration(seconds: 15));
+
+      final parsed = jsonDecode(resp.body);
+      if (parsed is! Map<String, dynamic>) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(t(context, 'common.unknown_error'))),
+          );
+        }
+        return false;
+      }
+
+      final status = (parsed['status'] ?? '').toString().toUpperCase();
+      if (status != 'OK') {
+        final msg = _extractMessage(parsed, fallback: t(context, 'common.error'));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(msg)),
+          );
+        }
+        return false;
+      }
+
+      final data = parsed['data'];
+      final token = data is Map<String, dynamic> ? data['token'] : null;
+      final secret = data is Map<String, dynamic> ? data['secret'] : null;
+
+      if (token is String &&
+          token.isNotEmpty &&
+          secret is String &&
+          secret.isNotEmpty) {
+        await prefs.setString('secret', secret);
+        await prefs.setString('token', token);
+        await _clearPendingReferral(prefs);
+        return true;
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(t(context, 'common.unknown_error'))),
+        );
+      }
+      return false;
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${t(context, 'common.error')}: $e')),
+        );
+      }
+      return false;
+    }
+  }
+
   Future<void> verifySmsCode() async {
     if (_submitting) return;
     if (!mounted) return;
@@ -428,12 +615,14 @@ class _SmsInputPageState extends State<SmsInputPage>
     setState(() => _submitting = true);
 
     try {
-      final credential = PhoneAuthProvider.credential(
-        verificationId: _verificationId,
-        smsCode: _code,
-      );
-
-      final ok = await _handleAuth(credential);
+      final ok = widget.useCustomOtp
+          ? await _verifyOtpCustom()
+          : await _handleAuth(
+              PhoneAuthProvider.credential(
+                verificationId: _verificationId,
+                smsCode: _code,
+              ),
+            );
 
       if (!mounted) return;
 

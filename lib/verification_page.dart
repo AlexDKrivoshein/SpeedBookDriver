@@ -98,6 +98,7 @@ class _VerificationPageState extends State<VerificationPage> {
 
     debugPrint('[Verification] submit verification');
 
+    String? currentImageType;
     try {
       String b64(File f) => base64Encode(f.readAsBytesSync());
 
@@ -155,6 +156,7 @@ class _VerificationPageState extends State<VerificationPage> {
       for (final item in images) {
         final file = item['file'] as File;
         final type = item['type'] as String;
+        currentImageType = type;
         final base64 = b64(file);
         debugPrint('[Verification] upload $type base64 bytes=${base64.length}');
 
@@ -179,7 +181,7 @@ class _VerificationPageState extends State<VerificationPage> {
               .toUpperCase();
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(t(context, 'Error: $message'))),
+              SnackBar(content: Text(t(context, 'Error: $message (type: $type)'))),
             );
           }
           return;
@@ -205,8 +207,11 @@ class _VerificationPageState extends State<VerificationPage> {
     } catch (e, st) {
       debugPrint('[Verification] error: $e\n$st');
       if (mounted) {
+        final typeSuffix = currentImageType != null
+            ? ' (type: $currentImageType)'
+            : '';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${t(context, 'verification.snackbar.error')}: $e')),
+          SnackBar(content: Text('${t(context, 'verification.snackbar.error')}: $e$typeSuffix')),
         );
       }
     } finally {

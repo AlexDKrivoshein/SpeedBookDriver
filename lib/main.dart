@@ -10,7 +10,6 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -576,90 +575,83 @@ class _RootState extends State<_Root> {
   }
 
   void _attachAuthListener() {
-    FirebaseAuth.instance.authStateChanges().listen((user) async {
-      _isLoggedIn = user != null;
+    _syncAuthFromBackend();
+  }
 
-      if (_isLoggedIn) {
-        final sessionReady = await _waitForBackendSession();
-        if (!sessionReady) {
-          if (mounted) {
-            setState(() {
-              _hasSession = false;
-              _checkingInit = false;
-            });
-          }
-          return;
-        }
+  Future<void> _syncAuthFromBackend() async {
+    final sessionReady = await _waitForBackendSession();
+    _isLoggedIn = sessionReady;
 
-        Map<String, dynamic>? profile;
-        try {
-          final p = await ApiService.checkTokenOnline(validateOnline: true);
-          final status = '${p['status'] ?? ''}'.toUpperCase();
-          if (status != 'OK') {
-            final msg = _extractMsg(p, fallback: 'Authorization failed');
-            await _fatal(msg);
-            return;
-          }
-          profile = p;
-        } on AuthException catch (e) {
-          await _fatal(e.message);
-          return;
-        } catch (e) {
-          await _fatal('Network error. Please try again later.');
-          return;
-        }
+    if (!sessionReady) {
+      final prefs = await SharedPreferences.getInstance();
+      final savedLang = (prefs.getString('user_lang') ?? '').toLowerCase();
+      final systemLang = WidgetsBinding
+          .instance.platformDispatcher.locale.languageCode
+          .toLowerCase();
+      final guestLang = savedLang.isNotEmpty ? savedLang : systemLang;
+      debugPrint('[Main] Lang pick (guest): saved="$savedLang" '
+          'system="$systemLang" chosen="$guestLang"');
 
-        debugPrint('[Main] Profile: $profile');
-
-        try {
-          final prefs = await SharedPreferences.getInstance();
-          final savedLang = (prefs.getString('user_lang') ?? '').toLowerCase();
-          final profileData = profile?['data'];
-          final profileLang = (profileData is Map<String, dynamic>
-                      ? profileData['user_lang']
-                      : null)
-                  ?.toString()
-                  .toLowerCase() ??
-              '';
-          final systemLang = WidgetsBinding
-              .instance.platformDispatcher.locale.languageCode
-              .toLowerCase();
-          final userLang = savedLang.isNotEmpty
-              ? savedLang
-              : (profileLang.isNotEmpty ? profileLang : systemLang);
-          debugPrint('[Main] Lang pick: saved="$savedLang" '
-              'profile="$profileLang" system="$systemLang" '
-              'chosen="$userLang"');
-
-          if (mounted) {
-            await context.read<Translations>().setLang(userLang);
-            setState(() {
-              _hasSession = true;
-              _checkingInit = false;
-            });
-          }
-        } catch (_) {
-          // ignore
-        }
-      } else {
-        final prefs = await SharedPreferences.getInstance();
-        final savedLang = (prefs.getString('user_lang') ?? '').toLowerCase();
-        final systemLang = WidgetsBinding
-            .instance.platformDispatcher.locale.languageCode
-            .toLowerCase();
-        final guestLang = savedLang.isNotEmpty ? savedLang : systemLang;
-        debugPrint('[Main] Lang pick (guest): saved="$savedLang" '
-            'system="$systemLang" chosen="$guestLang"');
-
-        if (mounted) {
-          await context.read<Translations>().setLang(guestLang);
-          setState(() {
-            _hasSession = false;
-            _checkingInit = false;
-          });
-        }
+      if (mounted) {
+        await context.read<Translations>().setLang(guestLang);
+        setState(() {
+          _hasSession = false;
+          _checkingInit = false;
+        });
       }
-    });
+      return;
+    }
+
+    Map<String, dynamic>? profile;
+    try {
+      final p = await ApiService.checkTokenOnline(validateOnline: true);
+      final status = '${p['status'] ?? ''}'.toUpperCase();
+      if (status != 'OK') {
+        final msg = _extractMsg(p, fallback: 'Authorization failed');
+        await _fatal(msg);
+        return;
+      }
+      profile = p;
+    } on AuthException catch (e) {
+      await _fatal(e.message);
+      return;
+    } catch (e) {
+      await _fatal('Network error. Please try again later.');
+      return;
+    }
+
+    debugPrint('[Main] Profile: $profile');
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedLang = (prefs.getString('user_lang') ?? '').toLowerCase();
+      final profileData = profile?['data'];
+      final profileLang = (profileData is Map<String, dynamic>
+                  ? profileData['user_lang']
+                  : null)
+              ?.toString()
+              .toLowerCase() ??
+          '';
+      final systemLang = WidgetsBinding
+          .instance.platformDispatcher.locale.languageCode
+          .toLowerCase();
+      final userLang = savedLang.isNotEmpty
+          ? savedLang
+          : (profileLang.isNotEmpty ? profileLang : systemLang);
+      debugPrint('[Main] Lang pick: saved="$savedLang" '
+          'profile="$profileLang" system="$systemLang" '
+          'chosen="$userLang"');
+
+      if (mounted) {
+        await context.read<Translations>().setLang(userLang);
+        setState(() {
+          _hasSession = true;
+          _checkingInit = false;
+        });
+      }
+    } catch (_) {
+      // ignore
+    }
   }
 
   String _extractMsg(Map<String, dynamic> map, {String fallback = 'Error'}) {

@@ -545,12 +545,32 @@ class DriverApi {
       final item = images[i];
       final type = item['type'] as String;
       final file = item['file'] as Uint8List;
-      await ApiService
-          .callAndDecode('add_car_verification_image', {
-        'type': type,
-        'base64': b64(file),
-      }, timeoutSeconds: 300)
-          .timeout(const Duration(seconds: 300));
+      try {
+        final imageRes = await ApiService
+            .callAndDecode('add_car_verification_image', {
+          'type': type,
+          'base64': b64(file),
+        }, timeoutSeconds: 300)
+            .timeout(const Duration(seconds: 300));
+        final imageStatus =
+            (imageRes is Map ? imageRes['status'] : null)
+                ?.toString()
+                .toUpperCase();
+        if (imageStatus != 'OK') {
+          final message = (imageRes is Map ? imageRes['message'] : null)
+              ?.toString();
+          return <String, dynamic>{
+            'status': imageStatus ?? 'ERROR',
+            'message': 'Image upload failed (type: $type)'
+                '${message != null ? ': $message' : ''}',
+          };
+        }
+      } catch (e) {
+        return <String, dynamic>{
+          'status': 'ERROR',
+          'message': 'Image upload failed (type: $type): $e',
+        };
+      }
       onProgress?.call(i + 2, totalSteps);
     }
 

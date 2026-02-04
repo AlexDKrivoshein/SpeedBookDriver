@@ -1,10 +1,15 @@
 // lib/phone_input_page.dart
+import 'dart:convert';
+import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:http/http.dart' as http;
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
 import 'brand.dart';                 // Brand.yellow / Brand.yellowDark
@@ -21,6 +26,8 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
   // ассеты под макет
   static const _assetLogoBanner = 'assets/brand/speedbooknew.png';
   static const _assetPattern    = 'assets/brand/background.png';
+  static const MethodChannel _configChannel =
+  MethodChannel('com.speedbook.taxidriver/config');
 
   final _phoneCtrl  = TextEditingController();
   final _phoneFocus = FocusNode();                 // <-- фокус для поля номера
@@ -74,6 +81,26 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
 
     setState(() => _submitting = true);
     try {
+      if (_country.iso2.toUpperCase() == 'KH') {
+        final key = await _requestOtpCustom(e164);
+        if (!mounted) return;
+        if (key == null || key.isEmpty) {
+          setState(() => _submitting = false);
+          return;
+        }
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => SmsInputPage(
+              verificationId: key,
+              phone: e164,
+              useCustomOtp: true,
+            ),
+          ),
+        );
+        setState(() => _submitting = false);
+        return;
+      }
+
       final lang = context.read<Translations>().lang;
       try {
         await FirebaseAuth.instance.setLanguageCode(lang);
@@ -124,6 +151,107 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('${t(context, "phone.failed_start")}: $e')),
       );
+    }
+  }
+
+  Future<Map<String, String>> _getDeviceInfo() async {
+    final deviceInfo = DeviceInfoPlugin();
+    String device = 'unknown';
+    try {
+      if (Platform.isAndroid) {
+        final info = await deviceInfo.androidInfo;
+        device = info.model ?? 'unknown';
+      } else if (Platform.isIOS) {
+        final info = await deviceInfo.iosInfo;
+        device = info.utsname.machine ?? 'unknown';
+      }
+    } catch (_) {}
+    return {'device': device};
+  }
+
+  String _extractMessage(Map<String, dynamic> json,
+      {String fallback = 'Error'}) {
+    final msg = (json['message']?.toString() ?? '').trim();
+    if (msg.isNotEmpty) return msg;
+    return fallback;
+  }
+
+  Future<String?> _requestOtpCustom(String phoneNumber) async {
+    String? apiUrl;
+    try {
+      apiUrl = await _configChannel.invokeMethod<String>('getApiUrl');
+    } catch (_) {}
+    if (apiUrl == null || apiUrl.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(t(context, 'common.api_url_missing'))),
+        );
+      }
+      return null;
+    }
+
+    final info = await PackageInfo.fromPlatform();
+    final platform =
+    Platform.isAndroid ? 'android' : (Platform.isIOS ? 'ios' : 'unknown');
+    final deviceInfo = await _getDeviceInfo();
+    final locale =
+        WidgetsBinding.instance.platformDispatcher.locale.languageCode;
+
+    try {
+      final resp = await http
+          .post(
+        Uri.parse('$apiUrl/api/request_otp'),
+        headers: const {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'phoneNumber': phoneNumber,
+          'platform': platform,
+          'device': deviceInfo['device'],
+          'app_version': info.version,
+          'locale': locale,
+          'is_driver': true,
+        }),
+      )
+          .timeout(const Duration(seconds: 15));
+
+      final parsed = jsonDecode(resp.body);
+      if (parsed is! Map<String, dynamic>) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(t(context, 'common.unknown_error'))),
+          );
+        }
+        return null;
+      }
+
+      final status = (parsed['status'] ?? '').toString().toUpperCase();
+      if (status != 'OK') {
+        final msg = _extractMessage(parsed, fallback: t(context, 'common.error'));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(msg)),
+          );
+        }
+        return null;
+      }
+
+      final data = parsed['data'];
+      final key = data is Map<String, dynamic> ? data['key']?.toString() : null;
+      if (key == null || key.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(t(context, 'common.unknown_error'))),
+          );
+        }
+        return null;
+      }
+      return key;
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${t(context, 'common.error')}: $e')),
+        );
+      }
+      return null;
     }
   }
 
