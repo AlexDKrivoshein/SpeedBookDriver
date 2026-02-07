@@ -3,13 +3,13 @@ import UIKit
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
-  private let channelName = "com.speedbook.taxi/config"
+  private let channelName = "com.speedbook.taxidriver/config"
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
       let controller = window?.rootViewController as! FlutterViewController
-      let channel = FlutterMethodChannel(name: "com.speedbook.taxi/config",
+      let channel = FlutterMethodChannel(name: "com.speedbook.taxidriver/config",
                                          binaryMessenger: controller.binaryMessenger)
 
       channel.setMethodCallHandler { call, result in
